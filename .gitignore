@@ -1,0 +1,7 @@
+node_modules/
+*.tgz
+task_plan.md
+findings.md
+progress.md
+release-plan.md
+AGENTS.md

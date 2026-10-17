@@ -1,0 +1,57 @@
+{
+  "name": "chuanban-dsh-writingset",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "DeepSeek Harness (DSH) 纯净写作协作模式插件（与 Storydesk 工作台内核等效）",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./presets": {
+      "types": "./src/presets.ts",
+      "default": "./dist/presets.js"
+    },
+    "./client": {
+      "default": "./dist/client.js"
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node ./scripts/build-client.mjs",
+    "test": "node ./tests/verify-bundle.mjs",
+    "switch": "node ./scripts/switch-preset.mjs",
+    "prepublishOnly": "node ./scripts/build-client.mjs && node ./tests/verify-bundle.mjs"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "cordis",
+    "writing",
+    "storydesk",
+    "preset"
+  ],
+  "author": "船板",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Anarcadia/chuanban-dsh-writingset.git"
+  },
+  "files": [
+    "dist",
+    "cordis.patch.yml",
+    "src"
+  ]
+}
