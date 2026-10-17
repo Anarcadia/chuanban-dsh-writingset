@@ -134,6 +134,23 @@ class MockSystemPromptService {
 }
 
 // 模拟 Cordis Context
+/** 宿主同款工具定义契约校验：DSH tools.register 在新建会话时执行的 TypeError 条件 + render 冒烟。 */
+function assertHostToolContract(registered) {
+  for (const tool of registered) {
+    const o = tool.output;
+    assert.ok(o !== undefined && o !== null && typeof o === 'object', `tool "${tool.name}" 必须声明 output 对象（宿主 register 校验）`);
+    assert.equal(typeof o.render, 'function', `tool "${tool.name}" output.render 必须为函数`);
+    assert.ok(o.presentationMeta === undefined || typeof o.presentationMeta === 'function', `tool "${tool.name}" presentationMeta 必须为函数`);
+    assert.ok(o.schema && typeof o.schema === 'object' && o.schema.type === 'object', `tool "${tool.name}" output.schema 必须为 object JSON Schema`);
+    const fake = {};
+    for (const [k, spec] of Object.entries(o.schema.properties ?? {})) {
+      fake[k] = spec.type === 'integer' || spec.type === 'number' ? 1 : spec.type === 'boolean' ? true : 'x';
+    }
+    const blocks = o.render({}, fake);
+    assert.ok(Array.isArray(blocks) && blocks.length >= 1 && blocks[0].type === 'text' && typeof blocks[0].text === 'string', `tool "${tool.name}" render 必须返回 [{type:'text'}]`);
+  }
+}
+
 function createMockContext() {
   const events = new Map();
   const sp = new MockSystemPromptService();
@@ -443,6 +460,7 @@ console.log('✓ [Test 5 通过] 三模式矩阵（off/custom-append/custom-repl
   const names = registered.map((t) => t.name);
   assert.deepEqual(names.sort(), ['copy_file', 'move_file', 'stat_file', 'trash_file'], `必须注册四工具（实际 ${names}）`);
   const byName = Object.fromEntries(registered.map((t) => [t.name, t]));
+  assertHostToolContract(registered);
 
   // 真实文件系统功能实测（隔离 tmp 目录）
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'file-butler-test-'));
@@ -519,6 +537,7 @@ console.log('✓ [Test 6 通过] file-butler 四工具注册、真实文件系�
   bridge.apply(bridgeCtx);
   assert.deepEqual(registered.map((x) => x.name).sort(), ['convert_document', 'export_document'], '必须注册 convert_document 与 export_document');
   const byName = Object.fromEntries(registered.map((x) => [x.name, x]));
+  assertHostToolContract(registered);
   const exec = (tool, args) => tool.execute(args, { signal: undefined });
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-bridge-test-'));

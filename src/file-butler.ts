@@ -62,6 +62,18 @@ export function apply(ctx: any): void {
       destination: { type: 'string', required: true, description: 'Destination path.' },
       overwrite: { type: 'boolean', description: 'Whether an existing destination may be overwritten. Defaults to true.' },
     },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          source: { type: 'string', required: true },
+          destination: { type: 'string', required: true },
+          bytes: { type: 'integer', required: true },
+          is_directory: { type: 'boolean', required: true },
+        },
+      },
+      render: (_args, v) => [{ type: 'text', text: `Copied ${v.source} \u2192 ${v.destination} (${v.bytes} bytes${v.is_directory ? ', directory tree' : ''})` }],
+    },
     async execute(args: { file_path: string; destination: string; overwrite?: boolean }) {
       const overwrite = args.overwrite !== false;
       const src = await toRealPath(ctx, args.file_path, 'file_path');
@@ -79,6 +91,17 @@ export function apply(ctx: any): void {
     parameters: {
       file_path: { type: 'string', required: true, description: 'Source path to move (file or directory).' },
       destination: { type: 'string', required: true, description: 'Destination path.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          source: { type: 'string', required: true },
+          destination: { type: 'string', required: true },
+          moved: { type: 'boolean', required: true },
+        },
+      },
+      render: (_args, v) => [{ type: 'text', text: `Moved ${v.source} \u2192 ${v.destination}` }],
     },
     async execute(args: { file_path: string; destination: string }) {
       const src = await toRealPath(ctx, args.file_path, 'file_path');
@@ -99,6 +122,17 @@ export function apply(ctx: any): void {
     description: 'Move a file or directory into the system trash (~/.Trash on macOS), from which it can be restored. This never permanently deletes anything.',
     parameters: {
       file_path: { type: 'string', required: true, description: 'Path of the file or directory to trash.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          trashed: { type: 'string', required: true },
+          trash_path: { type: 'string', required: true },
+          restore_hint: { type: 'string', required: true },
+        },
+      },
+      render: (_args, v) => [{ type: 'text', text: `Moved to trash (recoverable): ${v.trashed} \u2192 ${v.trash_path}` }],
     },
     async execute(args: { file_path: string }) {
       const src = await toRealPath(ctx, args.file_path, 'file_path');
@@ -123,6 +157,19 @@ export function apply(ctx: any): void {
     description: 'Show metadata of a file or directory: size in bytes, creation and modification times, and type.',
     parameters: {
       file_path: { type: 'string', required: true, description: 'Path to inspect.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          path: { type: 'string', required: true },
+          size_bytes: { type: 'integer', required: true },
+          created: { type: 'string', required: true },
+          modified: { type: 'string', required: true },
+          is_directory: { type: 'boolean', required: true },
+        },
+      },
+      render: (_args, v) => [{ type: 'text', text: `${v.path} \u2014 ${v.size_bytes} bytes, created ${v.created}, modified ${v.modified}${v.is_directory ? ' [directory]' : ''}` }],
     },
     async execute(args: { file_path: string }) {
       const src = await toRealPath(ctx, args.file_path, 'file_path');

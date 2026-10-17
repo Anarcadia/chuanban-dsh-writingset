@@ -291,6 +291,18 @@ export function apply(ctx: any): void {
       file_path: { type: 'string', required: true, description: 'Path to the .docx source.' },
       destination: { type: 'string', description: 'Destination .md path. Defaults to the source path with the extension replaced by .md.' },
     },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          source: { type: 'string', required: true },
+          destination: { type: 'string', required: true },
+          characters: { type: 'integer', required: true },
+          preview: { type: 'string', required: true },
+        },
+      },
+      render: (_args, v) => [{ type: 'text', text: `Converted ${v.source} \u2192 ${v.destination} (${v.characters} chars)\n\n${v.preview}` }],
+    },
     async execute(args) {
       const src = await toRealPath(ctx, args.file_path, 'file_path');
       const dst = args.destination
@@ -315,6 +327,17 @@ export function apply(ctx: any): void {
     parameters: {
       file_path: { type: 'string', required: true, description: 'Path to the .md source.' },
       destination: { type: 'string', description: 'Destination .docx path. Defaults to the source path with the extension replaced by .docx.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          source: { type: 'string', required: true },
+          destination: { type: 'string', required: true },
+          bytes: { type: 'integer', required: true },
+        },
+      },
+      render: (_args, v) => [{ type: 'text', text: `Exported ${v.source} \u2192 ${v.destination} (${v.bytes} bytes, new .docx)` }],
     },
     async execute(args) {
       const src = await toRealPath(ctx, args.file_path, 'file_path');
