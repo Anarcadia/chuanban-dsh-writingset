@@ -1,161 +1,162 @@
 # chuanban-dsh-writingset
 
-> **DeepSeek Harness (DSH) 纯净写作协作模式插件（Writing Preset Bundle）**  
-> 消除编程噪音 · 最小文件工具集 · 两层搭积木提示词 · 后台动态选项注入
+> **DeepSeek Harness (DSH) 纯净写作协作预设插件**  
+> *Minimal writing-collaboration preset for DeepSeek Harness — zero coding noise, `read / write / edit` only, and modular role prompts.*
 
-## 安装
+**极简介绍**：船板自用 DSH 写作工作台，砍掉 DSH 所有系统提示（接近极简模式），同时比极简模式增加基础读写工具适配写作场景，添加情境代入写作人设，帮助 Agent 更好代入。
+
+插件本身不具备破限和风格指定效果，破限和风格指定需要用户在工作区添加世界观和写作风格资料、伪上下文；插件预设起到的作用，是帮助 Agent 更好地接受和理解你的设定，就像药引子。
+
+插件有 2 件套，可搭配船板的仿 Claude 暖纸皮肤 [`chuanban-dsh-theme`](https://github.com/Anarcadia/chuanban-dsh-theme) 使用。
+
+---
+
+写作者需要的 Agent 工作台其实极其简单：
+
+**一个由本地文件夹与 Markdown 文档构成的工作区**
+
+**一个不受工具说明和编程提示词干扰，系统提示词专为沉浸写作设计的 Agent 伙伴。**
+
+大多数通用或编程向 Agent 默认在后台塞入了数千字的“资深软件工程师”规训、代码规范、沙箱审批说明与庞大的工具链。拿它们来推敲小说、打磨长文或对戏时，模型总会带着强烈的“程序员肌肉记忆”——聊着天擅自落盘建文件、改完一段文字还要像交代码 PR 一样列出 `1. 2. 3.` 修改汇报，甚至时不时跳出语境做温和化说教。
+
+DSH 在这一点上也不例外。虽然它内置了「极简模式（`minimal`）」，但那是一个近乎 0 提示词、0 文件工具的跑分向模式。在清掉噪音的同时，也失去了对 Agent 写作身份的引导与最基础的本地读写工具，因此并不适合直接拿来写作。
+
+`chuanban-dsh-writingset` 的目标只有一件事：**赋予 DSH 极简、稳定的基础写作预设和工具环境**。
+
+它在 DSH 运行时将原生编程提示词与冗余工具一刀切清零，把可选工具收敛为纯粹的 `read`、`write`、`edit`，再用**「去工程化的用户协作基底 + 极简写作人设」双层提示词积木**接管上下文。
+
+于是，首轮输入仅 **1,196 tokens**（比官方标准预设节省逾 **80%**），让 DSH 成为一张高效、低底噪的纯文字工作台。
+
+用户还可通过后台设置，选择加载工作台 `AGENTS.md` / `CLAUDE.md` 等通用 Agent 规则文档，与上述的二层提示词叠加，构成**三层提示词积木**，因此此插件不会与本地 Skill、工作区预设冲突。
+
+然而，和其它同样修改 DSH 初始系统提示词的写作预设插件会有潜在冲突，不建议一同开启，或者建议发送给 AI 分析确保无冲突后再使用。
+
+![DSH 写作协作模式与暖纸皮肤实机效果](docs/screenshot-session.png)
+
+---
+
+## 一键安装
+
+### 1. DSH Desktop 桌面端（最简）
+
+打开 **设置 → 插件**，在安装输入框直接粘贴以下 URL：
+
+```text
+https://github.com/Anarcadia/chuanban-dsh-writingset/releases/latest/download/chuanban-dsh-writingset.tgz
+```
+
+### 2. DSH CLI 命令行
 
 ```sh
 dsh plugin --profile writing add https://github.com/Anarcadia/chuanban-dsh-writingset/releases/latest/download/chuanban-dsh-writingset.tgz
 dsh web    # 或在 DSH Desktop 中选择 writing profile
 ```
 
-- 未安装 dsh CLI：把上面的 `dsh` 换成 `npx @deepseek-ai/dsh`
-- DSH Desktop 用户：设置 → 插件 → 安装框直接贴 URL
-- 连同暖纸皮肤一起装：`dsh plugin --profile writing add <上面 URL> https://github.com/Anarcadia/chuanban-dsh-theme/releases/latest/download/chuanban-dsh-theme.tgz`
+- **未全局安装 `dsh` CLI**：将上面的 `dsh` 替换为 `npx @deepseek-ai/dsh`：
 
-装完默认进入「职业写手」模式；pro / play / rp / pure 四个职能预设与「工作区文档注入」开关，在设置的「写作协作配置」面板中热切换（无需重启）。
+  ```sh
+  npx @deepseek-ai/dsh plugin --profile writing add https://github.com/Anarcadia/chuanban-dsh-writingset/releases/latest/download/chuanban-dsh-writingset.tgz
+  ```
 
----
+- **连同配套暖纸皮肤（[`chuanban-dsh-theme`](https://github.com/Anarcadia/chuanban-dsh-theme)）一起装**（一条命令同时装入纯净内核与 Claude Desktop 暖白纸阅读外观）：
 
-本项目是 **[Issue D147](../../../issue/issue-D147-dsh-minimal-writing-collab-preset.md)** 的交付成果，专为日常文学创作、角色对戏、灵感构思与 Markdown 本地文档协作打造。它与 **[Storydesk 写作工作台](../../../issue/issue-D126-chuanban-xiezuo-gongzuotai-zonggang.md)**（D138/D139）在创作哲学上**完全内核等效**，区别在于本插件依托 DSH 底层基础设施原生运行。
+  ```sh
+  dsh plugin --profile writing add https://github.com/Anarcadia/chuanban-dsh-writingset/releases/latest/download/chuanban-dsh-writingset.tgz https://github.com/Anarcadia/chuanban-dsh-theme/releases/latest/download/chuanban-dsh-theme.tgz
+  ```
 
----
-
-## 核心架构设计
-
-```mermaid
-flowchart TD
-  subgraph ClientUI["前台用户交互界面"]
-    UIPreset["前台预设选择器\n【写作协作模式】(默认常驻)"]
-    OptSwitch["可选直选行 (Row Switch)\nwriting-pro / play / rp / pure"]
-  end
-
-  subgraph DSHCore["DSH Cordis 运行时"]
-    Injector["writing-brick-injector 宿主插件\n(activePreset / includeBaseProtocol)"]
-    VarInject["ctx.systemPrompt.variable('writing_active_brick')"]
-    Persona["@deepseek-ai/dsh-persona\nprefix: '{{writing_active_brick}}'\ncomplete: true\nincludeRuntimeContext: false"]
-    IsolatedFS["pure-fs (cordis:group)\nisolate: { fs: true }\nfs-local + tool-fs (read, write, edit)"]
-  end
-
-  subgraph Bricks["两层提示词搭积木"]
-    L1["第一层公共底座：文档与工具协作准则\n(对话优先 / 克制落盘 / 无痕编辑 / 去工程化)"]
-    L2["第二层职能积木 (后台选项切换)\n1. pro: 职业写手 v2 无我沉浸版 (默认)\n2. play: 纯粹娱乐与灵感共谋\n3. rp: 创作与 RP 扮演 (第四面墙)\n4. pure: 纯净通用写作底座 (白板)\n5. pro-v1: 职业写手 v1 锋利版 (留档)"]
-  end
-
-  Injector --> VarInject
-  Bricks --> Injector
-  VarInject --> Persona
-  Persona --> UIPreset
-  IsolatedFS --> UIPreset
-```
-
-### 1. 零编程污染上下文净化
-- **独占提示词**：主预设使用 `complete: true`，在组装瀑布流终点将提示词强制截断为单一的纯净写作指令，彻底清除 DSH 默认的数千字“资深全栈工程师”提示词与编程规范。
-- **静音沙箱上下文**：`includeRuntimeContext: false` 静音沙箱策略与审批机制说明。
-- **作用域隔离剥离沙箱参数**：在 `cordis:group` 内启用 `isolate: { fs: true }`，彻底移除 `write/edit` 工具 Schema 中的 `sandbox_permissions` 与 `justification` 参数。
-
-### 2. 两层搭积木提示词体系
-- **第一层（公共底座）**：`BASE_TOOL_PROTOCOL`（去工程化、对话优先、克制落盘、无痕编辑）。
-- **第二层（职能人设）**：四大初始预设（`pro` / `play` / `rp` / `pure`）+ `pro-v1` 锋利版留档备选。
+安装后，前台预设选择器默认切入**「写作协作模式」**（初始激活「职业写手」预设）。所有职能切换与工作区规则注入均可在**「设置 → 写作协作配置」**面板中热切换，新开会话即刻生效，无需重启。
 
 ---
 
-## 四大初始预设对照表
+## 快速上手：用「三层积木」搭好你的写作台
 
-| 预设 ID | 名称 | 定位与核心特色 | 提示词核心导向 |
-|:---|:---|:---|:---|
-| **`pro`**<br>*(默认)* | **职业写手**<br>*(v2 无我沉浸版)* | **标准测试版**。以“忘我”为最高职业操守，消除一切抽离感与冷酷姿态，将工作区设定与世界观作为唯一准则。 | 彻底杜绝脱离语境的免责声明、道德评判或温和化稀释，将其视为导致世界观部件失效的严重失职。 |
-| **`play`** | **纯粹娱乐**<br>*(灵感共谋版)* | **随性脑洞与快感导向**。不审视世俗价值，不强行升华立意，与作者共同推进私密趣味或荒诞脑洞。 | 顺着抛出的苗头大胆推演，把好玩和爽快的体验推到极致。 |
-| **`rp`** | **创作与 RP 扮演**<br>*(第四面墙版)* | **全浸入式叙事与虚构对戏**。严守第四面墙，绝不出戏以 AI 视角做元叙事点评。 | 用感官细节、动作张力推进场面（Show, don't tell），查阅与记录文档作为纯后台静默动作。 |
-| **`pure`** | **纯净通用写作底座**<br>*(零预设人设白板)* | **纯白板模式**。仅挂载第一层文档与工具协作准则，不设定任何预置角色偏向。 | 适合由首轮 Prompt、外部 Skill 或工作区文档完全自由定义角色。 |
-| **`pro-v1`**<br>*(留档)* | **职业写手 v1**<br>*(第一性原理锋利版)* | **锋利效率导向**。强调不惜代价达成创作目的，将文本视为功能性部件。 | 保留供实测对照比较 v1 与 v2 体感。 |
+打开 DSH **设置（`Cmd + ,`）→ 写作协作配置**（或左侧 **插件 → `chuanban-dsh-writingset`**），面板由上至下对应了这套**三层提示词积木**的组装逻辑：
+
+![写作协作配置面板与推荐设置](docs/screenshot-settings.png)
+
+### 第一、二层：去工程化协作基底 + 写作职能人设
+
+所有预设默认勾选同一块约 120 字的第一层基底——**【文档与工具协作准则】**（规定对话优先、未获明确指令严禁擅自建文件；改稿只做精准替换、拒绝输出代码 PR 式的修改点汇报；摒弃软件工程黑话与机械分点）。
+
+在这块干净基底之上，你可以选择叠加哪一块第二层**「写作职能人设」**：
+
+| 预设 ID               | 名称                               | 适用场景与核心导向                                                                                                               |
+| :------------------ | :------------------------------- | :---------------------------------------------------------------------------------------------------------------------- |
+| **`pro`** *(默认)*    | **职业写手**<br>*(v2 无我沉浸版)*         | **我主要就是为了设计这个模式而做的插件：用于无禁忌无底线的小说创作，请在工作区放置详细的世界观资料文档和示例文（伪装成旧稿续写），叠加起来可影响 Agent 输出风格**。（单独使用预设不具备破甲或风格定义的效果）            |
+| **`play`**          | **纯粹娱乐**<br>*(随性脑洞与灵感共谋)*        | **脑洞推演、爽文构思与私密趣味探索**。以当下的兴致、快感与想象力张力为唯一标准，不审视世俗价值，不强行升华立意或正能量收尾，顺着你抛出的苗头把好玩推到极致。                                        |
+| **`rp`**            | **创作与 RP 扮演**<br>*(全浸入式叙事与第四面墙)* | **仅测试：角色对戏与沉浸式叙事**。严守“第四面墙”，绝不跳出戏外以 AI 助手视角做元叙事点评；用感官细节、动作张力与潜台词推进场面（Show, don't tell），查阅设定或改写文档均作为纯后台静默动作，执行完立即无缝回到戏内。 |
+| **`pure`**          | **纯净通用写作底座**<br>*(零预设人设白板)*      | **日常专栏、散文随笔或完全自定义角色**。仅保留底层【文档与工具协作准则】，不预置任何角色倾向，完全交由你的首轮指令或工作区文档自由定义。                                                  |
+| **`pro-v1`** *(留档)* | **职业写手 v1**<br>*(第一性原理锋利版)*      | **仅测试：效率与锋利导向备选**。强调不惜代价达成创作目的与预期受众反应，将笔下文本视为严丝合缝的功能性部件。我一开始设计的第一版方案，留档供对照体感。                                           |
+
+> **PS**：如果你希望把某几个模式直接并列放在聊天窗底部的预设选择器里随时点选，可以在「插件 → `chuanban-dsh-writingset`」详情页把对应预设行（`preset-writing-pro` / `play` / `rp` / `pure`）的开关打开。
+
+### 第三层：工作区提示模式（如上图红绿批注）
+
+前面两层积木只负责把 Agent 调教成“懂规矩、不说教、不乱建文件的写手白板”。真正决定具体题材、文风与创作深度的，是下方的**「工作区提示模式」**三选一：
+
+1. **初始纯净（`off`，默认 · 见图中红色标注）**
+   - **怎么工作**：只注入前两层积木（职能人设 + 协作基底），**完全不读取工作区里的任何文档**。
+   - **什么时候用**：适合刚装好插件测试、随手聊脑洞或改一段短文，上下文极度干净（首轮仅 \~1,196 tokens）。但请注意，在没有第三层工作区资料配合时，单靠几百字的初始人设并不会自动赋予特定文风，也不具备破甲的效果。
+
+2. **工作区识别（`workspace` · 见图中绿色标注，日常主力推荐）**
+   - **怎么工作**：每次新开会话组装系统提示词时，自动扫描你当前打开的本地文件夹，把里面的规则与设定文档作为第三层 `【工作区上下文规则】` 拼接到前两层积木之后。
+
+   - **自动扫描顺序**：
+
+     ```text
+     AGENTS.md → CLAUDE.md → memory.md → memory/*.md → rules.md → rules/*.md
+     ```
+
+     *(注：`CLAUDE.md` 与 `AGENTS.md` 内容相同时自动去重；总读取上限 64KB，超出自动截断并注明；如果当前文件夹里没有这些文件，会自动静默退回「初始纯净」，不会报错。)*
+
+   - **怎么搭出最佳效果**：
+     - 如果你已经有一套带 `AGENTS.md` 或本地 `.agents/skills/` 的写作工作台，切到这个模式就能无缝衔接，插件不会吃掉你的工作区规则。
+     - 如果你用默认的 **`pro`（职业写手）** 写小说，建议在工作区放一份 `AGENTS.md`（写明你的文风要求与设定目录），并放好详细的**世界观设定文档**与**示例正文（让 Agent 作为旧稿参考或续写）**——“无我职业操守 + 工作区世界观 + 旧稿样本”三层叠在一起，才能真正把模型的注意力锁死在故事语境里。
+
+3. **自定义填写（`custom`）**
+   - **怎么工作**：直接在设置面板的文本框里手写第三层提示词，可选 **「追加在初始提示后（`append`）」**，或者点面板上的「用当前初始提示填充编辑」按钮切到 **「整段替换初始提示（`replace`）」** 直接改写默认积木。
+   - **什么时候用**：不想在本地文件夹里建 `AGENTS.md`，但想临时加几条人设、文风要求或直接微调内置提示词时使用。
 
 ---
 
-## 后台预设切换的三种方式
+## 底层做了什么？（为什么不与本地 Skill 冲突，但忌叠装同类预设插件）
 
-本插件前台预设选择器始终保持优雅统一的**「写作协作模式」**，具体注入哪块职能积木由后台选项决定：
+DSH 原生的 `minimal` 模式之所以不能直接用来写东西，是因为它把文件工具也一起砍掉了；而官方默认模式又挂满了工程插件。本插件在底层通过 `cordis.patch.yml` 做了四件精确的改造：
 
-### 方式 1：DSH 客户端后台可视化配置面板（推荐）
-打开 DSH Web / Desktop 客户端：
-1. 点击左侧导航栏 **「插件」**；
-2. 找到 `chuanban-dsh-writingset`，进入详情页；
-3. 在顶部的「写作协作模式积木配置」卡片中，通过下拉框在 5 个预设中自由选择，并可实时预览组装后的完整 System Prompt。
+- **接管并重构主系统提示词（`complete: true`）**：在 `@deepseek-ai/dsh-persona` 开启 `complete: true`，将渲染终点的系统提示词收束为 `{{writing_active_brick}}` 变量，一刀切掉官方数千字的全栈工程师人设。
+  - **为什么不与本地工作台/Skill 冲突**：插件在宿主侧通过 `workspace` 模式主动读取当前会话目录（`cwd`）下的 `AGENTS.md` / `CLAUDE.md` / `memory` / `rules` 并拼入 `{{writing_active_brick}}`，等于在干净的底座上为你留好了标准的工作区规则入口。
+  - **为什么不建议与其它系统提示词插件同开**：因为 `complete: true` 是独占截断机制，若同时启用其它修改初始 Persona 或拦截 System Prompt 的插件，两者会互相覆盖或拼出混乱指令。
+- **静音沙箱与审批长文（`includeRuntimeContext: false`）**：关掉运行时沙箱策略与审批机制的冗长说明，只留必需的当前工作目录路径感知。
+- **收敛为最小读写工具面（`isolate: { fs: true, attachments: true }`）**：在独立作用域挂载 `@deepseek-ai/dsh-fs-local` 与 `@deepseek-ai/dsh-tool-fs`，切断根作用域 `read_image` 的自动注册，并剥离 `write` / `edit` 工具 Schema 里的 `sandbox_permissions` 与 `justification` 参数——模型眼里只有干干净净的 `read`、`write`、`edit`（外加宿主自带的零参查询工具 `load_workspace_dependencies`）。
+- **保留长文会话压缩**：内置 `@deepseek-ai/dsh-compaction-basic` 与 `/compact` 指令，长篇连载讨论可随时压缩上下文。
 
-### 方式 2：使用命令行一键切换 CLI 工具
-在终端项目根目录下：
+---
+
+## 进阶：命令行切换与本地自检
+
+如果你克隆了本仓库在本地折腾，也可以直接用自带的零依赖 CLI 脚本查看或切换预设：
+
 ```bash
 # 查看所有可用预设积木及当前激活项
 node scripts/switch-preset.mjs --list
 
-# 预览指定预设（如 play）拼接后的完整 System Prompt
-node scripts/switch-preset.mjs --show play
+# 预览指定预设（如 pro）拼接后的完整 System Prompt
+node scripts/switch-preset.mjs --show pro
 
-# 一键切换为纯粹娱乐模式 (play)
+# 一键切换默认预设（pro / play / rp / pure / pro-v1）
 node scripts/switch-preset.mjs play
 
-# 一键切回职业写手模式 (pro)
-node scripts/switch-preset.mjs pro
-```
-
-### 方式 3：直接编辑 `cordis.patch.yml`
-打开项目根目录下的 `cordis.patch.yml`，修改 `writing-brick-injector` 的配置项：
-```yaml
-- id: writing-brick-injector
-  name: 'chuanban-dsh-writingset'
-  config:
-    activePreset: rp            # 可填 pro / play / rp / pure / pro-v1
-    includeBaseProtocol: true
-    customPromptOverride: ''    # custom 模式下生效的自定义工作区提示
-    workspacePromptMode: off    # off / custom / workspace（三选一，见下表）
-    customPromptBehavior: append # custom 模式行为：append 追加 / replace 整段替换
-```
-
-> **进阶直选模式**：若希望将某个预设直接并列展示在前台选择器中，可在 DSH 插件详情页将对应预设行（如 `preset-writing-play`）的开关（Row Switch）开启即可。
-
----
-
-## 工作区提示三模式（Phase 7）
-
-在后台面板「工作区提示模式」三选一（仅作用于主预设「写作协作模式」；四个直选预设行保持静态不受影响）：
-
-| 模式 | 行为 | 适用场景 |
-|:---|:---|:---|
-| **初始纯净**（`off`，默认） | 仅双层积木（职能积木 + 文档与工具协作准则），不读取工作区任何文档 | 开箱即用的纯净写作 |
-| **自定义填写**（`custom`） | 后台填写自定义工作区提示：`追加` 在初始提示之后拼接；`替换初始提示` 整段接管（面板「用当前初始提示填充编辑」按钮一键带入当前组装结果再改） | 有本项目专属协作规则但不落文件 |
-| **工作区识别**（`workspace`） | 会话组装系统提示词时，宿主自动读取会话工作目录的基础设施文档并追加在初始提示之后 | 与 Storydesk 等本地文档工作台联动 |
-
-**workspace 模式扫描清单**（按序拼接，与前一文件同内容的别名文件自动去重，总字节上限 64KB、超出截断并在段首注明，文档缺失静默降级为仅初始积木）：
-
-```
-AGENTS.md → CLAUDE.md → memory.md → memory/*.md → rules.md → rules/*.md
-```
-
-实现机制：`writing_active_brick` 变量 provider 在 render 期经 `context.agent.session.header.cwd` 获取会话工作目录（与 DSH agent-loop 注册 `{{cwd}}` 变量同源），同步读取工作区文档后以【工作区上下文规则】段追加——不依赖 `agent-instructions`，与 `complete: true` 独占通道完全兼容。
-
----
-
-## 本地自检验证
-
-本项目内置原生自检测试套件，验证全部模板插值与作用域隔离：
-```bash
+# 运行内置 5 项全链路自检测试套件
 npm test
-# 或
-node ./tests/verify-bundle.mjs
 ```
 
-自检测试覆盖：
-1. 核心导出入口与 `package.json` / `dsh.bundle.patch` 合规性；
-2. 模拟 DSH `SystemPrompt` 严格模板插值逻辑与全部 5 种模式测试；
-3. Cordis `Volatile<T>` 响应式解包与热更新测试；
-4. `cordis.patch.yml` 沙箱隔离参数与直选预设行验证；
-5. CLI 切换工具读写 YAML 真实链路测试；
-6. 工作区提示三模式矩阵（off / custom-append / custom-replace / workspace）、静音降级、64KB 截断、CLAUDE.md 去重与变量 provider 上下文注入测试。
+## 停用与卸载
 
----
+- **临时切回官方编程模式**：不用卸载，直接在聊天输入框左下角的预设选择器切回官方预设，或在「设置 → 插件」中关掉本插件开关即可。
+- **卸载插件**：
+  - **DSH Desktop**：设置 → 插件 → 找到 `chuanban-dsh-writingset` 点击卸载。
+  - **DSH CLI**：`dsh plugin --profile writing remove chuanban-dsh-writingset`
 
-## 与 Storydesk 写作工作台的联动关系
+## License
 
-- **双轨并列**：Storydesk（D138/D139）通过通用 Agent + Skill 运行，而本插件作为 DSH 原生运行时载体；两者提示词积木与文档准则保持严格一致。
-- **完全体演进**：后续可通过 DSH 插件机制进一步无缝桥接 Storydesk 的创作导师（`what-story`）、第一性导师（`xiao-o-mentor`）及故事卡片提炼链路。
+[MIT](package.json) © 船板
