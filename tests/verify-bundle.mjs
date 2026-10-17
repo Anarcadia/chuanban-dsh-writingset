@@ -134,7 +134,50 @@ class MockSystemPromptService {
 }
 
 // 模拟 Cordis Context
-/** 宿主同款工具定义契约校验：DSH tools.register 在新建会话时执行的 TypeError 条件 + render 冒烟。 */
+// 宿主 dsh-tools/json-schema.ts 的强制子集（assertSupportedJsonSchema）复刻：
+// 仅允许 type/oneOf/properties/required/additionalProperties/items/enum/const + 注解关键字；
+// required 只允许出现在 type:object 节点上且必须为字符串数组并逐一存在于 properties。
+const SUBSET_CONSTRAINT = new Set(['type', 'oneOf', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const']);
+const SUBSET_ANNOTATION = new Set(['description', 'title', 'default', 'examples']);
+const SUBSET_TYPES = ['object', 'array', 'string', 'number', 'integer', 'boolean', 'null'];
+function assertSchemaSubset(node, path, violations) {
+  if (typeof node !== 'object' || node === null || Array.isArray(node)) {
+    violations.push(`${path} must be a schema object`);
+    return;
+  }
+  for (const key of Object.keys(node)) {
+    if (!SUBSET_CONSTRAINT.has(key) && !SUBSET_ANNOTATION.has(key)) violations.push(`${path}.${key} is not a supported keyword`);
+  }
+  if (typeof node.description === 'boolean') violations.push(`${path}.description must be a string`);
+  const hasType = Object.hasOwn(node, 'type');
+  const hasOneOf = Object.hasOwn(node, 'oneOf');
+  if (hasType && hasOneOf) { violations.push(`${path} cannot declare both type and oneOf`); return; }
+  if (!hasType) return;
+  const type = node.type;
+  if (!SUBSET_TYPES.includes(type)) { violations.push(`${path}.type must be one of ${SUBSET_TYPES.join('/')}`); return; }
+  const allowedBeside = {
+    properties: ['object'], required: ['object'], additionalProperties: ['object'], items: ['array'],
+    enum: ['string', 'number', 'integer', 'boolean', 'null'], const: ['string', 'number', 'integer', 'boolean', 'null'],
+  };
+  for (const [key, types] of Object.entries(allowedBeside)) {
+    if (Object.hasOwn(node, key) && !types.includes(type)) violations.push(`${path}.${key} is not supported on type "${type}"`);
+  }
+  if (type === 'object' && Object.hasOwn(node, 'properties') && typeof node.properties === 'object' && node.properties !== null) {
+    for (const [k, child] of Object.entries(node.properties)) assertSchemaSubset(child, `${path}.properties.${k}`, violations);
+    if (Object.hasOwn(node, 'required')) {
+      if (!Array.isArray(node.required) || node.required.some((e) => typeof e !== 'string')) {
+        violations.push(`${path}.required must be an array of strings`);
+      } else {
+        for (const key of node.required) {
+          if (!Object.hasOwn(node.properties, key)) violations.push(`${path}.required names "${key}" which is not in properties`);
+        }
+      }
+    }
+  }
+  if (type === 'array' && Object.hasOwn(node, 'items')) assertSchemaSubset(node.items, `${path}.items`, violations);
+}
+
+/** 宿主同款工具定义契约校验：DSH tools.register 在新建会话时执行的 TypeError + JSON Schema 子集校验 + render 冒烟。 */
 function assertHostToolContract(registered) {
   for (const tool of registered) {
     const o = tool.output;
@@ -142,6 +185,9 @@ function assertHostToolContract(registered) {
     assert.equal(typeof o.render, 'function', `tool "${tool.name}" output.render 必须为函数`);
     assert.ok(o.presentationMeta === undefined || typeof o.presentationMeta === 'function', `tool "${tool.name}" presentationMeta 必须为函数`);
     assert.ok(o.schema && typeof o.schema === 'object' && o.schema.type === 'object', `tool "${tool.name}" output.schema 必须为 object JSON Schema`);
+    const violations = [];
+    assertSchemaSubset(o.schema, 'schema', violations);
+    assert.deepStrictEqual(violations, [], `tool "${tool.name}" output.schema 必须通过宿主 assertSupportedJsonSchema 子集校验`);
     const fake = {};
     for (const [k, spec] of Object.entries(o.schema.properties ?? {})) {
       fake[k] = spec.type === 'integer' || spec.type === 'number' ? 1 : spec.type === 'boolean' ? true : 'x';

@@ -295,11 +295,12 @@ export function apply(ctx) {
       schema: {
         type: 'object', additionalProperties: false,
         properties: {
-          source: { type: 'string', required: true },
-          destination: { type: 'string', required: true },
-          characters: { type: 'integer', required: true },
-          preview: { type: 'string', required: true },
+          source: { type: 'string' },
+          destination: { type: 'string' },
+          characters: { type: 'integer' },
+          preview: { type: 'string' },
         },
+        required: ['source', 'destination', 'characters', 'preview'],
       },
       render: (_args, v) => [{ type: 'text', text: `Converted ${v.source} \u2192 ${v.destination} (${v.characters} chars)\n\n${v.preview}` }],
     },
@@ -332,10 +333,11 @@ export function apply(ctx) {
       schema: {
         type: 'object', additionalProperties: false,
         properties: {
-          source: { type: 'string', required: true },
-          destination: { type: 'string', required: true },
-          bytes: { type: 'integer', required: true },
+          source: { type: 'string' },
+          destination: { type: 'string' },
+          bytes: { type: 'integer' },
         },
+        required: ['source', 'destination', 'bytes'],
       },
       render: (_args, v) => [{ type: 'text', text: `Exported ${v.source} \u2192 ${v.destination} (${v.bytes} bytes, new .docx)` }],
     },
