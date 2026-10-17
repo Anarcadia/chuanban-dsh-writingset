@@ -92,7 +92,7 @@ export function apply(ctx) {
       properties: {
         file_path: { type: 'string', description: 'Source path to copy (file or directory).' },
         destination: { type: 'string', description: 'Destination path.' },
-        overwrite: { type: 'boolean', description: 'Whether an existing destination may be overwritten. Defaults to true.' },
+        overwrite: { type: 'boolean', description: 'Whether an existing destination may be overwritten. Defaults to false to prevent accidental data loss.' },
       },
       required: ['file_path', 'destination'],
     },
@@ -110,7 +110,7 @@ export function apply(ctx) {
       render: (_args, v) => [{ type: 'text', text: `Copied ${v.source} \u2192 ${v.destination} (${v.bytes} bytes${v.is_directory ? ', directory tree' : ''})` }],
     },
     async execute(args) {
-      const overwrite = args.overwrite !== false;
+      const overwrite = args.overwrite === true;
       const src = await toRealPath(ctx, args.file_path, 'file_path');
       const rawDst = await toRealPath(ctx, args.destination, 'destination');
       const dst = await resolveFileOrDirDestination(src, rawDst);

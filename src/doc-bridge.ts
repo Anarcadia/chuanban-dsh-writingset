@@ -151,7 +151,7 @@ function zipBuild(files: Record<string, string>): Buffer {
 /* ───────────────────── docx → markdown ───────────────────── */
 
 function safeCodePoint(code: number): string {
-  return Number.isInteger(code) && code > 0 && code <= 0x10ffff
+  return Number.isInteger(code) && code > 0 && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff)
     ? String.fromCodePoint(code)
     : '';
 }
@@ -317,10 +317,32 @@ function ensureNonOverwritingDocxTarget(
   return { display: candidateDisplay, real: candidateReal };
 }
 
+/**
+ * 确保 convert_document 绝不覆盖已存在的 .md 文件（防「重新提取」吞掉已编辑内容）：
+ * 若目标路径已存在，自动派生 <stem>.converted.md（或 <stem>.converted-2.md ...）。
+ */
+function ensureNonOverwritingMdTarget(
+  dst: { display: string; real: string },
+  existsFn: (p: string) => boolean,
+): { display: string; real: string } {
+  if (!existsFn(dst.real)) return dst;
+  const stemDisplay = dst.display.replace(/\.md$/i, '');
+  const stemReal = dst.real.replace(/\.md$/i, '');
+  let candidateDisplay = `${stemDisplay}.converted.md`;
+  let candidateReal = `${stemReal}.converted.md`;
+  let seq = 2;
+  while (existsFn(candidateReal)) {
+    candidateDisplay = `${stemDisplay}.converted-${seq}.md`;
+    candidateReal = `${stemReal}.converted-${seq}.md`;
+    seq += 1;
+  }
+  return { display: candidateDisplay, real: candidateReal };
+}
+
 export function apply(ctx: any): void {
   ctx.tools.register({
     name: 'convert_document',
-    description: 'Convert a .docx (Word) file into a Markdown text file (same name with .md by default). Extracts paragraphs, heading levels and list items; tables are flattened and inline formatting is dropped. Optionally returns a preview of the converted text.',
+    description: 'Convert a .docx (Word) file into a Markdown text file (same name with .md by default). Extracts paragraphs, heading levels and list items; tables are flattened and inline formatting is dropped. Optionally returns a preview of the converted text. Never overwrites an existing .md — derives <name>.converted.md instead.',
     parameters: {
       type: 'object',
       properties: {
@@ -344,12 +366,13 @@ export function apply(ctx: any): void {
     },
     async execute(args) {
       const src = await toRealPath(ctx, args.file_path, 'file_path');
-      const dst = args.destination
+      const rawDst = args.destination
         ? await toRealPath(ctx, args.destination, 'destination')
         : { display: src.display.replace(/\.docx$/i, '') + '.md', real: src.real.replace(/\.docx$/i, '') + '.md' };
-      if (src.real === dst.real) {
+      if (src.real === rawDst.real) {
         throw new Error(`Destination must differ from source file_path: "${src.display}"`);
       }
+      const dst = ensureNonOverwritingMdTarget(rawDst, existsSync);
       const bytes = await readFile(src.real);
       const docXmlBuf = zipRead(bytes, 'word/document.xml');
       if (docXmlBuf === undefined) throw new Error(`no word/document.xml inside "${src.display}" — is it a valid .docx?`);

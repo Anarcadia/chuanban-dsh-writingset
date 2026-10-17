@@ -538,11 +538,13 @@ console.log('✓ [Test 5 通过] 三模式矩阵（off/custom-append/custom-repl
   assert.equal(fs.readFileSync(path.join(dir, 'sub', 'b.md'), 'utf8'), content, 'copy_file 内容必须逐字一致');
   assert.equal(copyRes.bytes, Buffer.byteLength(content), 'copy_file 必须返回字节数');
 
-  // copy overwrite:false 拒绝覆盖已存在目标
+  // copy 默认拒绝覆盖已存在目标（防数据丢失）；显式 overwrite:true 才允许覆盖
   await assert.rejects(
-    () => exec(byName.copy_file, { file_path: path.join(dir, 'a.md'), destination: path.join(dir, 'sub', 'b.md'), overwrite: false }),
-    /exist/i, 'overwrite:false 时目标已存在必须报错',
+    () => exec(byName.copy_file, { file_path: path.join(dir, 'a.md'), destination: path.join(dir, 'sub', 'b.md') }),
+    /exist/i, '未传 overwrite 时必须默认拒绝覆盖已存在目标',
   );
+  await exec(byName.copy_file, { file_path: path.join(dir, 'a.md'), destination: path.join(dir, 'sub', 'b.md'), overwrite: true });
+  assert.equal(fs.readFileSync(path.join(dir, 'sub', 'b.md'), 'utf8'), content, 'overwrite:true 覆盖后目标内容必须等于源内容');
 
   // move：源消失、目标出现
   await exec(byName.move_file, { file_path: path.join(dir, 'sub', 'b.md'), destination: path.join(dir, 'c.md') });
@@ -643,8 +645,8 @@ console.log('✓ [Test 6 通过] file-butler 四工具注册、真实文件系�
 
   // convert：docx → md，往返结构等价
   const conv = await exec(byName.convert_document, { file_path: docxPath });
-  const backPath = path.join(dir, 'story.md');
-  assert.equal(conv.destination, backPath, 'convert 默认目标应为同名 .md（覆盖原 md）');
+  const backPath = path.join(dir, 'story.converted.md');
+  assert.equal(conv.destination, backPath, '目标 .md 已存在时 convert 必须避让为 .converted.md（不覆盖源 md）');
   const back = fs.readFileSync(backPath, 'utf8');
   const keep = (s) => s.split('\n').filter((l) => l.trim());
   assert.deepEqual(keep(back), keep(md.replace(/\*\*/g, '')), 'md→docx→md 往返后行集合必须等价');
@@ -660,7 +662,12 @@ console.log('✓ [Test 6 通过] file-butler 四工具注册、真实文件系�
   const text2 = execSync(`textutil -convert txt -stdout "${exp2.destination}"`, { encoding: 'utf8' });
   assert.ok(text2.includes('新增结尾段（含非法XML控制符换页与垂直制表）。'), 'XML 1.0 非法控制字符必须被安全剥除且导出文档可读');
 
-  // OOXML 解析边缘防回归：大写 Heading 1、十六进制实体 &#x2014;、标题内 <w:br/> 软回车、取消编号 <w:numId w:val="0"/>
+  // convert 防数据丢失：已编辑的 story.md 存在时，再次 convert 原 docx 不得静默覆盖它
+  const conv2 = await exec(byName.convert_document, { file_path: docxPath });
+  assert.match(path.basename(conv2.destination), /^story\.converted(-\d+)?\.md$/, 'convert 避让目标必须是 .converted 变体');
+  assert.ok(fs.readFileSync(mdPath, 'utf8').includes('新增结尾段'), '已编辑的 .md 必须原样保留（不被重新转换覆盖）');
+
+  // OOXML 解析边缘防回归：大写 Heading 1、十六进制实体 &#x2014;、标题内 <w:br/> 软回车、取消编号 <w:numId w:val="0"/>、代理区实体
   const edgeStyles = '<w:styles><w:style w:type="paragraph" w:styleId="H2Custom"><w:name w:val="Heading 2"/></w:style></w:styles>';
   const edgeLevels = bridge.headingLevelsFromStyles(edgeStyles);
   assert.equal(edgeLevels.get('H2Custom'), 2, '必须兼容 WPS/LibreOffice 大写 Heading N 样式名');
@@ -673,6 +680,8 @@ console.log('✓ [Test 6 通过] file-butler 四工具注册、真实文件系�
   const edgeMd = bridge.documentXmlToMarkdown(edgeDocXml, edgeLevels);
   assert.match(edgeMd, /^## 第四章 风雨—欲来$/m, '标题内软回车必须合并为单行且十六进制实体 &#x2014; 必须正确解码');
   assert.match(edgeMd, /^取消过编号的普通正文段$/m, 'w:numId val="0" 的段落不得被误判为无序列表');
+  const surrogateMd = bridge.documentXmlToMarkdown('<w:document><w:body><w:p><w:r><w:t>孤&#xD800;代理</w:t></w:r></w:p></w:body></w:document>', new Map());
+  assert.ok(!JSON.stringify(surrogateMd).includes('ud800'), '代理区实体不得解码为孤立代理项（会产生非法 XML）');
 
   // TS 源码镜像防回归：所有 src/*.ts 不得出现重复修饰符（如 export export）
   for (const tsFile of ['src/index.ts', 'src/presets.ts', 'src/file-butler.ts', 'src/doc-bridge.ts']) {
@@ -697,7 +706,7 @@ console.log('✓ [Test 6 通过] file-butler 四工具注册、真实文件系�
 
   fs.rmSync(dir, { recursive: true, force: true });
 }
-console.log('✓ [Test 7 通过] doc-bridge 双工具注册、md→docx（textutil 第三方校验）→md 往返等价、原稿防覆盖与 OOXML 边缘防回归验证完成。');
+console.log('✓ [Test 7 通过] doc-bridge 双工具注册、md→docx（textutil 第三方校验）→md 往返等价、双向防覆盖（docx/md）与 OOXML 边缘防回归验证完成。');
 
 console.log('\n' + '='.repeat(70));
 console.log('🎉 所有自检测试项全部通过 (All tests passed successfully)!');
