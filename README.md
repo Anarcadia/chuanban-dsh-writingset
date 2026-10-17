@@ -48,20 +48,20 @@ https://github.com/Anarcadia/chuanban-dsh-writingset/releases/latest/download/ch
 ### 2. DSH CLI 命令行
 
 ```sh
-dsh plugin --profile writing add https://github.com/Anarcadia/chuanban-dsh-writingset/releases/latest/download/chuanban-dsh-writingset.tgz
-dsh web    # 或在 DSH Desktop 中选择 writing profile
+dsh plugin --profile web add https://github.com/Anarcadia/chuanban-dsh-writingset/releases/latest/download/chuanban-dsh-writingset.tgz
+dsh web
 ```
 
 - **未全局安装 `dsh` CLI**：将上面的 `dsh` 替换为 `npx @deepseek-ai/dsh`：
 
   ```sh
-  npx @deepseek-ai/dsh plugin --profile writing add https://github.com/Anarcadia/chuanban-dsh-writingset/releases/latest/download/chuanban-dsh-writingset.tgz
+  npx @deepseek-ai/dsh plugin --profile web add https://github.com/Anarcadia/chuanban-dsh-writingset/releases/latest/download/chuanban-dsh-writingset.tgz
   ```
 
 - **连同配套暖纸皮肤（[`chuanban-dsh-theme`](https://github.com/Anarcadia/chuanban-dsh-theme)）一起装**（一条命令同时装入纯净内核与 Claude Desktop 暖白纸阅读外观）：
 
   ```sh
-  dsh plugin --profile writing add https://github.com/Anarcadia/chuanban-dsh-writingset/releases/latest/download/chuanban-dsh-writingset.tgz https://github.com/Anarcadia/chuanban-dsh-theme/releases/latest/download/chuanban-dsh-theme.tgz
+  dsh plugin --profile web add https://github.com/Anarcadia/chuanban-dsh-writingset/releases/latest/download/chuanban-dsh-writingset.tgz https://github.com/Anarcadia/chuanban-dsh-theme/releases/latest/download/chuanban-dsh-theme.tgz
   ```
 
 安装后，前台预设选择器默认切入 **「写作协作模式」** （初始激活「职业写手」预设）。所有职能切换与工作区规则注入均可在 **「设置 → 写作协作配置」** 面板中热切换，新开会话即刻生效，无需重启。
@@ -155,7 +155,7 @@ npm test
 - **临时切回官方编程模式**：不用卸载，直接在聊天输入框左下角的预设选择器切回官方预设，或在「设置 → 插件」中关掉本插件开关即可。
 - **卸载插件**：
   - **DSH Desktop**：设置 → 插件 → 找到 `chuanban-dsh-writingset` 点击卸载。
-  - **DSH CLI**：`dsh plugin --profile writing remove chuanban-dsh-writingset`
+  - **DSH CLI**：`dsh plugin --profile web remove chuanban-dsh-writingset`
 
 ## License
 
