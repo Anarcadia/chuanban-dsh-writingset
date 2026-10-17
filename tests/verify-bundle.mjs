@@ -43,7 +43,7 @@ for (const relPath of requiredFiles) {
 // 检查 package.json 结构
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf-8'));
 assert.equal(pkg.name, 'chuanban-dsh-writingset', 'package.json name 必须为 chuanban-dsh-writingset');
-assert.equal(pkg.version, '0.1.0');
+assert.match(pkg.version, /^\d+\.\d+\.\d+$/, 'package.json version 必须为合法 semver');
 assert.equal(pkg.type, 'module');
 assert.ok(pkg.exports['.'], 'package.json 缺少 . 导出');
 assert.ok(pkg.exports['./presets'], 'package.json 缺少 ./presets 导出');
@@ -163,7 +163,7 @@ function createMockContext() {
   assert.match(rendered, /以“忘我”为最高职业操守/, 'pro 模式必须是 v2 无我沉浸版');
   assert.match(rendered, /【文档与工具协作准则】/, 'pro 模式必须拼接底座准则');
   assert.match(rendered, /无痕编辑，拒绝汇报/, '底座准则必须包含无痕编辑');
-  assert.ok(!rendered.includes('glob'), '渲染后的提示词不得引用未挂载的 glob 工具');
+  assert.ok(rendered.includes('`glob`') && rendered.includes('`grep`'), '底座准则应说明 glob/grep 只读查找（fs-search 已挂载）');
 }
 
 // 2. 验证 play 预设（纯粹娱乐）
@@ -288,8 +288,11 @@ assert.doesNotMatch(patchYamlEffective, /readImage/, 'tool-fs 无 readImage 开�
 assert.doesNotMatch(patchYamlEffective, /\bread:\s*true\b/, 'tool-fs 无 read 布尔开关，不得写入无效配置键');
 assert.doesNotMatch(patchYamlEffective, /\bwrite:\s*true\b/, 'tool-fs 无 write 布尔开关，不得写入无效配置键');
 assert.doesNotMatch(patchYamlEffective, /\bedit:\s*true\b/, 'tool-fs 无 edit 布尔开关，不得写入无效配置键');
-// 预设未挂载 tool-fs-search（glob/grep），协作准则不得引用未挂载的 glob 工具
-assert.doesNotMatch(patchYamlEffective, /`glob`/, '协作准则不得引用未挂载的 glob 工具');
+// 预设已挂载 tool-fs-search（glob/grep 只读查找），协作准则同步引用，且组内声明必须存在
+assert.ok(patchYaml.includes("'@deepseek-ai/dsh-tool-fs-search'"), 'pure-fs 组必须挂载 dsh-tool-fs-search（目录列举/内容检索）');
+const fsSearchCount = (patchYaml.match(/dsh-tool-fs-search/g) || []).length;
+assert.ok(fsSearchCount >= 5, `五个预设的 pure-fs 组均须挂载 fs-search（实际 ${fsSearchCount} 处）`);
+assert.match(patchYamlEffective, /`glob`/, '协作准则应说明 glob 查找（fs-search 已挂载）');
 
 // 校验 4 个直选预设行已声明且默认 disabled: true
 const directPresets = ['preset-writing-pro', 'preset-writing-play', 'preset-writing-rp', 'preset-writing-pure'];
