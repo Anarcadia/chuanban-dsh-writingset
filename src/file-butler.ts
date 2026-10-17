@@ -8,8 +8,9 @@
  * trash_file 将文件移入系统回收站（~/.Trash，可恢复），绝不永久删除。
  */
 
+import { existsSync } from 'node:fs';
 import { cp, mkdir, rename, rm, stat } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import { homedir } from 'node:os';
 
 export const name = 'file-butler';
@@ -28,14 +29,59 @@ async function toRealPath(ctx: any, rawPath: unknown, label: string): Promise<{ 
   return { display: target.displayPath, real: ctx.fs.processPath(target) };
 }
 
-/** 回收站目标路径：~/.Trash/<原名>.<时间戳>，时间戳防同名覆盖。 */
-function trashDestination(displayPath: string): string {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  return join(homedir(), '.Trash', `${basename(displayPath)}.${stamp}`);
+/**
+ * 若源是文件而目标是已存在的目录（如 move_file("a.md", "archive")），自动将文件名拼入该目录；
+ * 同时拦截源目同路径、以及将父目录复制/移入自身子目录的危险操作。
+ */
+async function resolveFileOrDirDestination(
+  src: { display: string; real: string },
+  dst: { display: string; real: string },
+): Promise<{ display: string; real: string }> {
+  const srcInfo = await stat(src.real);
+  let finalDst = dst;
+  try {
+    const dstInfo = await stat(dst.real);
+    if (!srcInfo.isDirectory() && dstInfo.isDirectory()) {
+      const fileName = basename(src.real);
+      finalDst = {
+        display: join(dst.display, fileName),
+        real: join(dst.real, fileName),
+      };
+    }
+  } catch {
+    // 目标尚不存在，保持原路径
+  }
+  if (src.real === finalDst.real) {
+    throw new Error(`Source and destination must not be the same path: "${src.display}"`);
+  }
+  if (srcInfo.isDirectory() && finalDst.real.startsWith(src.real.endsWith(sep) ? src.real : src.real + sep)) {
+    throw new Error(`Cannot copy or move directory "${src.display}" into its own subdirectory "${finalDst.display}"`);
+  }
+  return finalDst;
+}
+
+/** 回收站目标路径：~/.Trash/<原名>.<毫秒时间戳>[-序号]，防同秒/同毫秒同名覆盖。 */
+function trashDestination(realPath: string): string {
+  const base = basename(realPath);
+  if (!base || base === '.' || base === '..' || realPath === dirname(realPath)) {
+    throw new Error(`Refusing to trash root or invalid directory path: "${realPath}"`);
+  }
+  const trashDir = join(homedir(), '.Trash');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 23);
+  let candidate = join(trashDir, `${base}.${stamp}`);
+  let seq = 2;
+  while (existsSync(candidate)) {
+    candidate = join(trashDir, `${base}.${stamp}-${seq}`);
+    seq += 1;
+  }
+  return candidate;
 }
 
 /** 跨卷 rename 失败时的回退：先复制再删源（删源仅发生在副本完整落盘之后）。 */
 async function moveAcrossDevices(srcReal: string, dstReal: string): Promise<void> {
+  if (srcReal === dstReal) {
+    throw new Error(`Refusing cross-device move onto same path: "${srcReal}"`);
+  }
   await cp(srcReal, dstReal, { recursive: true, force: true });
   await rm(srcReal, { recursive: true, force: true });
 }
@@ -69,7 +115,8 @@ export function apply(ctx: any): void {
     async execute(args: { file_path: string; destination: string; overwrite?: boolean }) {
       const overwrite = args.overwrite !== false;
       const src = await toRealPath(ctx, args.file_path, 'file_path');
-      const dst = await toRealPath(ctx, args.destination, 'destination');
+      const rawDst = await toRealPath(ctx, args.destination, 'destination');
+      const dst = await resolveFileOrDirDestination(src, rawDst);
       await mkdir(dirname(dst.real), { recursive: true });
       await cp(src.real, dst.real, { recursive: true, force: overwrite, errorOnExist: !overwrite });
       const info = await stat(dst.real);
@@ -85,6 +132,7 @@ export function apply(ctx: any): void {
       properties: {
         file_path: { type: 'string', description: 'Source path to move (file or directory).' },
         destination: { type: 'string', description: 'Destination path.' },
+        overwrite: { type: 'boolean', description: 'Whether an existing destination file may be overwritten. Defaults to false to prevent accidental data loss.' },
       },
       required: ['file_path', 'destination'],
     },
@@ -100,9 +148,14 @@ export function apply(ctx: any): void {
       },
       render: (_args, v) => [{ type: 'text', text: `Moved ${v.source} \u2192 ${v.destination}` }],
     },
-    async execute(args: { file_path: string; destination: string }) {
+    async execute(args: { file_path: string; destination: string; overwrite?: boolean }) {
+      const overwrite = args.overwrite === true;
       const src = await toRealPath(ctx, args.file_path, 'file_path');
-      const dst = await toRealPath(ctx, args.destination, 'destination');
+      const rawDst = await toRealPath(ctx, args.destination, 'destination');
+      const dst = await resolveFileOrDirDestination(src, rawDst);
+      if (!overwrite && existsSync(dst.real)) {
+        throw new Error(`EEXIST: destination already exists: "${dst.display}" (set overwrite: true or use trash_file first)`);
+      }
       await mkdir(dirname(dst.real), { recursive: true });
       try {
         await rename(src.real, dst.real);
@@ -138,7 +191,7 @@ export function apply(ctx: any): void {
     },
     async execute(args: { file_path: string }) {
       const src = await toRealPath(ctx, args.file_path, 'file_path');
-      const trashPath = trashDestination(src.display);
+      const trashPath = trashDestination(src.real);
       await mkdir(dirname(trashPath), { recursive: true });
       try {
         await rename(src.real, trashPath);

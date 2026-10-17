@@ -83,7 +83,7 @@
       config:
         id: writing-pro
         name: 写作 · 职业写手
-        description: 以“忘我”为最高职业操守，服从工作区设定与世界观，仅挂载纯净本地 read/write/edit。
+        description: 以“忘我”为最高职业操守，服从工作区设定与世界观，挂载纯净本地文档读写、查找、整理与 Word 转换工具。
         order: 2
         plugins:
           - id: persona
@@ -140,7 +140,7 @@
       config:
         id: writing-play
         name: 写作 · 纯粹娱乐
-        description: 随性脑洞与灵感共谋模式。去说教、去升华，仅挂载纯净本地 read/write/edit。
+        description: 随性脑洞与灵感共谋模式。去说教、去升华，挂载纯净本地文档读写、查找、整理与 Word 转换工具。
         order: 3
         plugins:
           - id: persona
@@ -195,7 +195,7 @@
       config:
         id: writing-rp
         name: 写作 · 创作与RP
-        description: 全浸入式叙事与角色对戏模式。严守第四面墙，工具静默后台化，仅挂载纯净本地 read/write/edit。
+        description: 全浸入式叙事与角色对戏模式。严守第四面墙，工具静默后台化，挂载纯净本地文档读写、查找、整理与 Word 转换工具。
         order: 4
         plugins:
           - id: persona
@@ -250,7 +250,7 @@
       config:
         id: writing-pure
         name: 写作 · 纯净底座
-        description: 仅挂载纯净本地 read/write/edit 与文档协作准则，不预设角色倾向。
+        description: 挂载纯净本地文档读写、查找、整理、Word 转换工具与文档协作准则，不预设角色倾向。
         order: 5
         plugins:
           - id: persona

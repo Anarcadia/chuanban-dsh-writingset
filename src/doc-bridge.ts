@@ -11,6 +11,7 @@
  * 无执行通道，路径经 ctx.fs.resolve 解析，与 read/write/edit 同等自由度。
  */
 
+import { existsSync } from 'node:fs';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { inflateRawSync } from 'node:zlib';
 import { dirname } from 'node:path';
@@ -34,6 +35,7 @@ async function toRealPath(ctx: any, rawPath: unknown, label: string): Promise<{ 
 
 /** 从 zip 字节中按路径取出解压后的内容；找不到返回 undefined。 */
 export function zipRead(buf: Buffer, wantedPath: string): Buffer | undefined {
+  if (!buf || buf.length < 22) throw new Error('not a valid zip/docx container (missing EOCD)');
   const EOCD_SIG = 0x06054b50;
   const CEN_SIG = 0x02014b50;
   const LOC_SIG = 0x04034b50;
@@ -45,16 +47,19 @@ export function zipRead(buf: Buffer, wantedPath: string): Buffer | undefined {
   const entryCount = buf.readUInt16LE(eocd + 10);
   let p = buf.readUInt32LE(eocd + 16);
   for (let n = 0; n < entryCount; n += 1) {
-    if (buf.readUInt32LE(p) !== CEN_SIG) throw new Error('corrupt zip central directory');
+    if (p + 46 > buf.length || buf.readUInt32LE(p) !== CEN_SIG) throw new Error('corrupt zip central directory');
     const method = buf.readUInt16LE(p + 10);
     const compressedSize = buf.readUInt32LE(p + 20);
     const nameLen = buf.readUInt16LE(p + 28);
     const extraLen = buf.readUInt16LE(p + 30);
     const commentLen = buf.readUInt16LE(p + 32);
     const localOffset = buf.readUInt32LE(p + 42);
-    const name = buf.toString('utf8', p + 46, p + 46 + nameLen);
+    const rawName = buf.toString('utf8', p + 46, p + 46 + nameLen);
+    const name = rawName.replace(/^\/+/, '').replace(/\\/g, '/');
     if (name === wantedPath) {
-      if (buf.readUInt32LE(localOffset) !== LOC_SIG) throw new Error('corrupt zip local header');
+      if (localOffset + 30 > buf.length || buf.readUInt32LE(localOffset) !== LOC_SIG) {
+        throw new Error('corrupt zip local header');
+      }
       const lNameLen = buf.readUInt16LE(localOffset + 26);
       const lExtraLen = buf.readUInt16LE(localOffset + 28);
       const dataStart = localOffset + 30 + lNameLen + lExtraLen;
@@ -145,31 +150,45 @@ function zipBuild(files: Record<string, string>): Buffer {
 
 /* ───────────────────── docx → markdown ───────────────────── */
 
+function safeCodePoint(code: number): string {
+  return Number.isInteger(code) && code > 0 && code <= 0x10ffff
+    ? String.fromCodePoint(code)
+    : '';
+}
+
 function xmlUnescape(s: string): string {
   return s
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => safeCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => safeCodePoint(Number(d)))
     .replace(/&amp;/g, '&');
 }
 
-/** 从 styles.xml 建 styleId → heading 级别映射（OOXML 内置样式名 "heading N" 语言无关）。 */
+/** 从 styles.xml 建 styleId → heading 级别映射（OOXML 内置样式名 "heading N" 大小写无关，兜底 outlineLvl）。 */
 export function headingLevelsFromStyles(stylesXml: string | undefined): Map<string, number> {
-  const map = new Map();
+  const map = new Map<string, number>();
   if (!stylesXml) return map;
   const re = /<w:style\b[^>]*w:styleId="([^"]+)"[^>]*>([\s\S]*?)<\/w:style>/g;
   let m;
   while ((m = re.exec(stylesXml)) !== null) {
-    const name = /<w:name w:val="heading (\d)"/.exec(m[2]);
-    if (name) map.set(m[1], Number(name[1]));
+    const name = /<w:name\b[^>]*\bw:val=["']heading\s*([1-6])["']/i.exec(m[2]);
+    if (name) {
+      map.set(m[1], Number(name[1]));
+      continue;
+    }
+    const outline = /<w:outlineLvl\b[^>]*\bw:val=["']([0-5])["']/.exec(m[2]);
+    if (outline && /w:type=["']paragraph["']/.test(m[0])) {
+      map.set(m[1], Number(outline[1]) + 1);
+    }
   }
   return map;
 }
 
 /** 把 word/document.xml 正文提取为 markdown 文本。 */
-export export function documentXmlToMarkdown(docXml: string, headingLevels: Map<string, number>): string {
+export function documentXmlToMarkdown(docXml: string, headingLevels: Map<string, number>): string {
   const paragraphs = docXml.split('</w:p>');
   const out = [];
   for (const p of paragraphs) {
@@ -188,9 +207,11 @@ export export function documentXmlToMarkdown(docXml: string, headingLevels: Map<
     const level = styleMatch ? headingLevels.get(styleMatch[1]) : undefined;
     const fallback = styleMatch ? /^(?:Heading|heading)([1-6])$/.exec(styleMatch[1]) : null;
     const heading = level ?? (fallback ? Number(fallback[1]) : undefined);
-    const isList = p.includes('<w:numPr') || styleMatch?.[1] === 'ListParagraph';
+    const hasActiveNumPr = p.includes('<w:numPr') && !/<w:numId\b[^>]*\bw:val=["']0["']/.test(p);
+    const isList = hasActiveNumPr || styleMatch?.[1] === 'ListParagraph';
     if (heading && heading >= 1 && heading <= 6) {
-      out.push('', '#'.repeat(heading) + ' ' + text, '');
+      const singleLineHeading = text.replace(/\s*\n+\s*/g, ' ');
+      out.push('', '#'.repeat(heading) + ' ' + singleLineHeading, '');
     } else if (isList) {
       const cleaned = text.replace(/^\u2022\s*/, '').replace(/\n/g, ' ');
       out.push('- ' + cleaned);
@@ -204,15 +225,19 @@ export export function documentXmlToMarkdown(docXml: string, headingLevels: Map<
 /* ───────────────────── markdown → docx ───────────────────── */
 
 function xmlEscape(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return s
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 /** md 行内清理：剥掉 md 强调标记，导出纯内容文本。 */
 function stripInlineMarkdown(s: string): string {
   return s
     .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*\s][^*]*?)\*/g, '$1')
+    .replace(/(^|[\s(])__([^_]+)__(?=[\s).,!?:;]|$)/g, '$1$2')
     .replace(/`([^`]+)`/g, '$1');
 }
 
@@ -228,7 +253,7 @@ function listParagraphXml(text: string): string {
   return `<w:p><w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr><w:r><w:t xml:space="preserve">\u2022 ${xmlEscape(text)}</w:t></w:r></w:p>`;
 }
 
-export export function markdownToDocxBuffer(mdText: string): Buffer {
+export function markdownToDocxBuffer(mdText: string): Buffer {
   const bodyParts = [];
   for (const rawLine of mdText.split('\n')) {
     const line = rawLine.trimEnd();
@@ -251,7 +276,7 @@ export export function markdownToDocxBuffer(mdText: string): Buffer {
   const headingStyles = [1, 2, 3, 4, 5, 6].map((n) => `
   <w:style w:type="paragraph" w:styleId="Heading${n}"><w:name w:val="heading ${n}"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:outlineLvl w:val="${n - 1}"/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr>${n <= 2 ? '<w:b/>' : ''}<w:sz w:val="${Math.max(18, 32 - n * 3) * 2}"/></w:rPr></w:style>`).join('');
   const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:eastAsia="Calibri"/><w:sz w:val="24"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style>${headingStyles}</w:styles>`;
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="PingFang SC"/><w:sz w:val="24"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="160" w:line="320" w:lineRule="auto"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="720"/><w:spacing w:after="80" w:line="320" w:lineRule="auto"/></w:pPr></w:style>${headingStyles}</w:styles>`;
 
   const files = {
     '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -269,6 +294,28 @@ export export function markdownToDocxBuffer(mdText: string): Buffer {
 /* ───────────────────── 工具注册 ───────────────────── */
 
 const PREVIEW_CHARS = 600;
+
+/**
+ * 确保 export_document 绝不覆盖已存在的 .docx 文件：
+ * 若目标路径已存在，自动派生 <stem>.exported.docx（或 <stem>.exported-2.docx ...）。
+ */
+function ensureNonOverwritingDocxTarget(
+  dst: { display: string; real: string },
+  existsFn: (p: string) => boolean,
+): { display: string; real: string } {
+  if (!existsFn(dst.real)) return dst;
+  const stemDisplay = dst.display.replace(/\.docx$/i, '');
+  const stemReal = dst.real.replace(/\.docx$/i, '');
+  let candidateDisplay = `${stemDisplay}.exported.docx`;
+  let candidateReal = `${stemReal}.exported.docx`;
+  let seq = 2;
+  while (existsFn(candidateReal)) {
+    candidateDisplay = `${stemDisplay}.exported-${seq}.docx`;
+    candidateReal = `${stemReal}.exported-${seq}.docx`;
+    seq += 1;
+  }
+  return { display: candidateDisplay, real: candidateReal };
+}
 
 export function apply(ctx: any): void {
   ctx.tools.register({
@@ -300,6 +347,9 @@ export function apply(ctx: any): void {
       const dst = args.destination
         ? await toRealPath(ctx, args.destination, 'destination')
         : { display: src.display.replace(/\.docx$/i, '') + '.md', real: src.real.replace(/\.docx$/i, '') + '.md' };
+      if (src.real === dst.real) {
+        throw new Error(`Destination must differ from source file_path: "${src.display}"`);
+      }
       const bytes = await readFile(src.real);
       const docXmlBuf = zipRead(bytes, 'word/document.xml');
       if (docXmlBuf === undefined) throw new Error(`no word/document.xml inside "${src.display}" — is it a valid .docx?`);
@@ -338,9 +388,13 @@ export function apply(ctx: any): void {
     },
     async execute(args) {
       const src = await toRealPath(ctx, args.file_path, 'file_path');
-      const dst = args.destination
+      const rawDst = args.destination
         ? await toRealPath(ctx, args.destination, 'destination')
         : { display: src.display.replace(/\.md$/i, '') + '.docx', real: src.real.replace(/\.md$/i, '') + '.docx' };
+      if (src.real === rawDst.real) {
+        throw new Error(`Destination must differ from source file_path: "${src.display}"`);
+      }
+      const dst = ensureNonOverwritingDocxTarget(rawDst, existsSync);
       const md = await readFile(src.real, 'utf8');
       const docx = markdownToDocxBuffer(md);
       await mkdir(dirname(dst.real), { recursive: true });

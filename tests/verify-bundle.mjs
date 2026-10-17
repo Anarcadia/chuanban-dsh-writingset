@@ -473,6 +473,17 @@ console.log('\n[Test 5] 工作区提示三模式矩阵与 readWorkspaceDocs 真�
   assert.ok(big.includes('已截断'), '超限必须注明截断');
   assert.ok(Buffer.byteLength(big, 'utf8') <= hostModule.WORKSPACE_DOCS_MAX_BYTES + 100, '截断后总字节不得超上限（含说明）');
 
+  // 性能与代理对边界防回归：2MB 含多字节汉字与 Emoji 的文档必须在 100ms 内完成 O(1) 截断，且末尾无 U+FFFD 或孤立代理项
+  fs.writeFileSync(path.join(wsDir, 'rules.md'), '设定🖋️章节'.repeat(200 * 1024), 'utf8');
+  fs.mkdirSync(path.join(wsDir, 'rules'), { recursive: true });
+  fs.writeFileSync(path.join(wsDir, 'rules', 'z-tail.md'), '截断后不应再拼入后续文件', 'utf8');
+  const t0 = Date.now();
+  const huge = hostModule.readWorkspaceDocs(wsDir);
+  const elapsedMs = Date.now() - t0;
+  assert.ok(elapsedMs < 200, `超大工作区文档截断必须为 O(1) 级（实际耗时 ${elapsedMs}ms）`);
+  assert.ok(!huge.includes('\uFFFD'), 'UTF-8 字节截断不得产生 U+FFFD 乱码');
+  assert.ok(!huge.includes('截断后不应再拼入后续文件'), '触发 64KB 截断后必须立即停止拼接后续文件');
+
   // 5.5 变量 provider 接收 AssembleContext：有 cwd 注入工作区段，无 cwd 降级
   const ctxWs = createMockContext();
   hostModule.apply(ctxWs, { activePreset: 'pro', includeBaseProtocol: true, workspacePromptMode: 'workspace' });
@@ -489,7 +500,7 @@ console.log('\n[Test 5] 工作区提示三模式矩阵与 readWorkspaceDocs 真�
   fs.rmSync(emptyDir, { recursive: true, force: true });
 }
 
-console.log('✓ [Test 5 通过] 三模式矩阵（off/custom-append/custom-replace/workspace）、静音降级、64KB 截断与 provider 上下文注入验证完成。');
+console.log('✓ [Test 5 通过] 三模式矩阵（off/custom-append/custom-replace/workspace）、静音降级、64KB O(1) 截断与 provider 上下文注入验证完成。');
 
 // ═══════════════════════════════════════════════════════════════
 // [Test 6] file-butler 文件管理积木：注册、真实文件系统功能与 yml 挂载
@@ -538,15 +549,34 @@ console.log('✓ [Test 5 通过] 三模式矩阵（off/custom-append/custom-repl
   assert.ok(!fs.existsSync(path.join(dir, 'sub', 'b.md')), 'move 后源必须消失');
   assert.equal(fs.readFileSync(path.join(dir, 'c.md'), 'utf8'), content, 'move 后内容必须保真');
 
+  // move 防静默覆盖：目标文件已存在且未传 overwrite:true 时必须报错保护原目标文件
+  await assert.rejects(
+    () => exec(byName.move_file, { file_path: path.join(dir, 'a.md'), destination: path.join(dir, 'c.md') }),
+    /exist/i, 'move_file 默认不得静默覆盖已存在的目标文件',
+  );
+
+  // move / copy 目标传入已存在目录名时，自动将文件移入/复制到该目录下同名文件
+  const archiveDir = path.join(dir, 'archive');
+  fs.mkdirSync(archiveDir);
+  const moveDirRes = await exec(byName.move_file, { file_path: path.join(dir, 'c.md'), destination: archiveDir });
+  assert.equal(moveDirRes.destination, path.join(archiveDir, 'c.md'), 'destination 为已存在目录时应自动拼入文件名');
+  assert.equal(fs.readFileSync(path.join(archiveDir, 'c.md'), 'utf8'), content);
+
   // stat：元数据字段
-  const statRes = await exec(byName.stat_file, { file_path: path.join(dir, 'c.md') });
+  const statRes = await exec(byName.stat_file, { file_path: path.join(archiveDir, 'c.md') });
   assert.equal(statRes.size_bytes, Buffer.byteLength(content), 'stat size_bytes 必须正确');
   assert.ok(statRes.created && statRes.modified, 'stat 必须返回时间字段');
 
-  // trash：文件进 ~/.Trash 且可恢复（留一个小文件在回收站，手动清理即可）
-  const trashRes = await exec(byName.trash_file, { file_path: path.join(dir, 'c.md') });
-  assert.ok(!fs.existsSync(path.join(dir, 'c.md')), 'trash 后原路径必须清空');
-  assert.ok(fs.existsSync(trashRes.trash_path), 'trash 后回收站路径必须存在（可恢复）');
+  // trash：同秒/同毫秒连续删除不同子目录下的同名文件不得互相覆盖，且测试后清理回收站残留
+  const sameName2 = path.join(dir, 'c.md');
+  fs.writeFileSync(sameName2, '第二份同名文件', 'utf8');
+  const trashRes1 = await exec(byName.trash_file, { file_path: path.join(archiveDir, 'c.md') });
+  const trashRes2 = await exec(byName.trash_file, { file_path: sameName2 });
+  assert.notEqual(trashRes1.trash_path, trashRes2.trash_path, '同秒删除同名文件必须生成不同回收站路径');
+  assert.equal(fs.readFileSync(trashRes1.trash_path, 'utf8'), content, '第一份进回收站的文件不得被第二份覆盖');
+  assert.equal(fs.readFileSync(trashRes2.trash_path, 'utf8'), '第二份同名文件', '第二份进回收站的文件内容必须完整');
+  fs.rmSync(trashRes1.trash_path, { force: true });
+  fs.rmSync(trashRes2.trash_path, { force: true });
 
   // 底座准则同步引用四工具
   {
@@ -567,7 +597,7 @@ console.log('✓ [Test 5 通过] 三模式矩阵（off/custom-append/custom-repl
 
   fs.rmSync(dir, { recursive: true, force: true });
 }
-console.log('✓ [Test 6 通过] file-butler 四工具注册、真实文件系统往返（复制/防覆盖/移动/元数据/回收站可恢复）与 yml 挂载验证完成。');
+console.log('✓ [Test 6 通过] file-butler 四工具注册、真实文件系统往返（复制/防覆盖/目录目标/元数据/回收站防碰撞）与 yml 挂载验证完成。');
 
 // ═══════════════════════════════════════════════════════════════
 // [Test 7] doc-bridge Word↔md 单向文档桥：注册、真实往返、第三方校验与挂载
@@ -620,6 +650,36 @@ console.log('✓ [Test 6 通过] file-butler 四工具注册、真实文件系�
   assert.deepEqual(keep(back), keep(md.replace(/\*\*/g, '')), 'md→docx→md 往返后行集合必须等价');
   assert.ok(conv.preview.includes('第一章'), 'convert 必须返回预览');
 
+  // 核心设计不变量防回归：当原 story.docx 已存在时，再次对 story.md 调用 export_document（不传 destination）
+  // 绝不能覆盖原 story.docx，必须自动避让生成 story.exported.docx
+  const originalDocxBytes = fs.readFileSync(docxPath);
+  fs.writeFileSync(mdPath, md + '\n新增结尾段（含非法XML控制符\x0c换页与\x0b垂直制表）。\n', 'utf8');
+  const exp2 = await exec(byName.export_document, { file_path: mdPath });
+  assert.equal(exp2.destination, path.join(dir, 'story.exported.docx'), '同名原 .docx 已存在时，export_document 必须自动避让为 .exported.docx');
+  assert.deepEqual(fs.readFileSync(docxPath), originalDocxBytes, '原 .docx 必须一字节未动');
+  const text2 = execSync(`textutil -convert txt -stdout "${exp2.destination}"`, { encoding: 'utf8' });
+  assert.ok(text2.includes('新增结尾段（含非法XML控制符换页与垂直制表）。'), 'XML 1.0 非法控制字符必须被安全剥除且导出文档可读');
+
+  // OOXML 解析边缘防回归：大写 Heading 1、十六进制实体 &#x2014;、标题内 <w:br/> 软回车、取消编号 <w:numId w:val="0"/>
+  const edgeStyles = '<w:styles><w:style w:type="paragraph" w:styleId="H2Custom"><w:name w:val="Heading 2"/></w:style></w:styles>';
+  const edgeLevels = bridge.headingLevelsFromStyles(edgeStyles);
+  assert.equal(edgeLevels.get('H2Custom'), 2, '必须兼容 WPS/LibreOffice 大写 Heading N 样式名');
+  const edgeDocXml = [
+    '<w:document><w:body>',
+    '<w:p><w:pPr><w:pStyle w:val="H2Custom"/></w:pPr><w:r><w:t>第四章</w:t><w:br/><w:t>风雨&#x2014;欲来</w:t></w:r></w:p>',
+    '<w:p><w:pPr><w:numPr><w:numId w:val="0"/></w:numPr></w:pPr><w:r><w:t>取消过编号的普通正文段</w:t></w:r></w:p>',
+    '</w:body></w:document>',
+  ].join('');
+  const edgeMd = bridge.documentXmlToMarkdown(edgeDocXml, edgeLevels);
+  assert.match(edgeMd, /^## 第四章 风雨—欲来$/m, '标题内软回车必须合并为单行且十六进制实体 &#x2014; 必须正确解码');
+  assert.match(edgeMd, /^取消过编号的普通正文段$/m, 'w:numId val="0" 的段落不得被误判为无序列表');
+
+  // TS 源码镜像防回归：所有 src/*.ts 不得出现重复修饰符（如 export export）
+  for (const tsFile of ['src/index.ts', 'src/presets.ts', 'src/file-butler.ts', 'src/doc-bridge.ts']) {
+    const tsContent = fs.readFileSync(path.join(ROOT_DIR, tsFile), 'utf8');
+    assert.doesNotMatch(tsContent, /\bexport\s+export\b/, `${tsFile} 不得包含重复的 export 语法错误`);
+  }
+
   // 底座准则引用两工具
   {
     const ctx = createMockContext();
@@ -637,7 +697,7 @@ console.log('✓ [Test 6 通过] file-butler 四工具注册、真实文件系�
 
   fs.rmSync(dir, { recursive: true, force: true });
 }
-console.log('✓ [Test 7 通过] doc-bridge 双工具注册、md→docx（textutil 第三方校验）→md 往返等价、准则引用与 yml 挂载验证完成。');
+console.log('✓ [Test 7 通过] doc-bridge 双工具注册、md→docx（textutil 第三方校验）→md 往返等价、原稿防覆盖与 OOXML 边缘防回归验证完成。');
 
 console.log('\n' + '='.repeat(70));
 console.log('🎉 所有自检测试项全部通过 (All tests passed successfully)!');

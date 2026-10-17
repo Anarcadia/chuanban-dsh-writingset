@@ -67,17 +67,19 @@ try {
   SchemaFactory = undefined;
 }
 if (SchemaFactory === undefined) {
-  // 0.2.1+ 宿主 argv[2] 是 host 入口文件、运行时根在 argv[3]，故逐个候选尝试
+  // 0.2.1+ 宿主 argv[2] 是 host 入口文件、运行时根在 argv[3]，故逐个候选尝试（兼顾目录与文件路径锚点）
   for (const runtimeRoot of process.argv.slice(2)) {
-    try {
-      const anchor = join(runtimeRoot, 'package.json');
-      const resolved = createRequire(anchor).resolve('@deepseek-ai/schemastery');
-      const mod: any = await import(pathToFileURL(resolved).href);
-      SchemaFactory = mod?.default ?? mod?.Schema ?? mod;
-      break;
-    } catch {
-      // 落到下一个候选
+    for (const anchor of [join(runtimeRoot, 'package.json'), runtimeRoot]) {
+      try {
+        const resolved = createRequire(anchor).resolve('@deepseek-ai/schemastery');
+        const mod: any = await import(pathToFileURL(resolved).href);
+        SchemaFactory = mod?.default ?? mod?.Schema ?? mod;
+        break;
+      } catch {
+        // 落到下一个候选
+      }
     }
+    if (SchemaFactory !== undefined) break;
   }
 }
 if (SchemaFactory === undefined) SchemaFactory = createSchemaBuilder();
@@ -139,6 +141,14 @@ const WORKSPACE_DOC_PLAN: Array<[string] | [string, '*.md']> = [
 /** 工作区文档总字节上限，超出截断并在段首注明 */
 export const WORKSPACE_DOCS_MAX_BYTES = 64 * 1024;
 
+/** 按 UTF-8 字节上限 O(1) 安全截断字符串，剥除末尾被劈开的不完整多字节序列（U+FFFD）。 */
+function sliceByUtf8Bytes(text: string, maxBytes: number): string {
+  if (maxBytes <= 0) return '';
+  const buf = Buffer.from(text, 'utf8');
+  if (buf.length <= maxBytes) return text;
+  return buf.subarray(0, maxBytes).toString('utf8').replace(/\uFFFD+$/g, '');
+}
+
 /**
  * 读取并拼接工作区基础设施文档（宿主侧，render 期同步执行）。
  * 任一文件缺失静默跳过；全部缺失返回空串（workspace 模式静音降级为仅初始积木）。
@@ -152,20 +162,16 @@ export function readWorkspaceDocs(cwd: string | undefined): string {
   let truncated = false;
 
   const pushDoc = (label: string, content: string): void => {
+    if (truncated) return;
     const trimmed = content.trim();
     if (!trimmed || seenContents.has(trimmed)) return;
     const text = `## ${label}\n${trimmed}`;
 
-    let bytes = Buffer.byteLength(text, 'utf8');
+    const bytes = Buffer.byteLength(text, 'utf8');
     if (total + bytes > WORKSPACE_DOCS_MAX_BYTES) {
       const remain = WORKSPACE_DOCS_MAX_BYTES - total;
-      if (remain <= 0) {
-        truncated = true;
-        return;
-      }
-      let cut = text.length;
-      while (cut > 0 && Buffer.byteLength(text.slice(0, cut), 'utf8') > remain) cut--;
-      parts.push(text.slice(0, cut));
+      const sliced = sliceByUtf8Bytes(text, remain);
+      if (sliced.length > 0) parts.push(sliced);
       truncated = true;
       return;
     }

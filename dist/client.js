@@ -222,11 +222,19 @@ window.__ModuleLoader__.load({
 		      h('div', { key: 'bar', style: S.row }, [
 		        h('button', {
 		          key: 'a', type: 'button', disabled, style: S.card(cfg.customPromptBehavior === 'append'),
-		          onClick: () => props.set('customPromptBehavior', 'append'),
+		          onClick: () => {
+		            if (draft !== null && draft !== cfg.customPromptOverride) props.set('customPromptOverride', draft);
+		            setDraft(null);
+		            props.set('customPromptBehavior', 'append');
+		          },
 		        }, h('span', { style: S.cardName }, '追加')),
 		        h('button', {
 		          key: 'r', type: 'button', disabled, style: S.card(cfg.customPromptBehavior === 'replace'),
-		          onClick: () => props.set('customPromptBehavior', 'replace'),
+		          onClick: () => {
+		            if (draft !== null && draft !== cfg.customPromptOverride) props.set('customPromptOverride', draft);
+		            setDraft(null);
+		            props.set('customPromptBehavior', 'replace');
+		          },
 		        }, h('span', { style: S.cardName }, '替换初始提示')),
 		        h('button', {
 		          key: 'f', type: 'button', disabled,
@@ -234,7 +242,7 @@ window.__ModuleLoader__.load({
 		            const base = currentBase();
 		            props.set('customPromptBehavior', 'replace');
 		            props.set('customPromptOverride', base);
-		            setDraft(base);
+		            setDraft(null);
 		          },
 		        }, h('span', { style: S.cardName }, '用当前初始提示填充编辑')),
 		      ]),
