@@ -418,7 +418,153 @@ console.log('\n[Test 5] 工作区提示三模式矩阵与 readWorkspaceDocs 真�
   fs.rmSync(emptyDir, { recursive: true, force: true });
 }
 
-console.log('✓ [Test 5 通过] 三模式矩阵（off/custom-append/custom-replace/workspace）、静音降级、64KB 截断与 provider 上下文注入验证通过。');
+console.log('✓ [Test 5 通过] 三模式矩阵（off/custom-append/custom-replace/workspace）、静音降级、64KB 截断与 provider 上下文注入验证完成。');
+
+// ═══════════════════════════════════════════════════════════════
+// [Test 6] file-butler 文件管理积木：注册、真实文件系统功能与 yml 挂载
+// ═══════════════════════════════════════════════════════════════
+{
+  const butler = await import('../dist/file-butler.js');
+  assert.equal(butler.name, 'file-butler', 'file-butler.name 必须为 file-butler');
+  assert.deepEqual(butler.inject, ['tools', 'fs'], 'file-butler.inject 必须为 [tools, fs]');
+
+  const registered = [];
+  const butlerCtx = {
+    tools: { register: (tool) => registered.push(tool) },
+    fs: {
+      resolve: async (p) => {
+        const abs = path.resolve(String(p));
+        return { displayPath: abs, targetKey: abs };
+      },
+      processPath: (t) => t.targetKey,
+    },
+  };
+  butler.apply(butlerCtx);
+  const names = registered.map((t) => t.name);
+  assert.deepEqual(names.sort(), ['copy_file', 'move_file', 'stat_file', 'trash_file'], `必须注册四工具（实际 ${names}）`);
+  const byName = Object.fromEntries(registered.map((t) => [t.name, t]));
+
+  // 真实文件系统功能实测（隔离 tmp 目录）
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'file-butler-test-'));
+  const content = '# 测试稿\n中文内容 🖋️ 与 "引号"\n';
+  fs.writeFileSync(path.join(dir, 'a.md'), content, 'utf8');
+  const exec = (tool, args) => tool.execute(args, { signal: undefined });
+
+  // copy：自动建父目录 + 内容逐字保真
+  const copyRes = await exec(byName.copy_file, { file_path: path.join(dir, 'a.md'), destination: path.join(dir, 'sub', 'b.md') });
+  assert.equal(fs.readFileSync(path.join(dir, 'sub', 'b.md'), 'utf8'), content, 'copy_file 内容必须逐字一致');
+  assert.equal(copyRes.bytes, Buffer.byteLength(content), 'copy_file 必须返回字节数');
+
+  // copy overwrite:false 拒绝覆盖已存在目标
+  await assert.rejects(
+    () => exec(byName.copy_file, { file_path: path.join(dir, 'a.md'), destination: path.join(dir, 'sub', 'b.md'), overwrite: false }),
+    /exist/i, 'overwrite:false 时目标已存在必须报错',
+  );
+
+  // move：源消失、目标出现
+  await exec(byName.move_file, { file_path: path.join(dir, 'sub', 'b.md'), destination: path.join(dir, 'c.md') });
+  assert.ok(!fs.existsSync(path.join(dir, 'sub', 'b.md')), 'move 后源必须消失');
+  assert.equal(fs.readFileSync(path.join(dir, 'c.md'), 'utf8'), content, 'move 后内容必须保真');
+
+  // stat：元数据字段
+  const statRes = await exec(byName.stat_file, { file_path: path.join(dir, 'c.md') });
+  assert.equal(statRes.size_bytes, Buffer.byteLength(content), 'stat size_bytes 必须正确');
+  assert.ok(statRes.created && statRes.modified, 'stat 必须返回时间字段');
+
+  // trash：文件进 ~/.Trash 且可恢复（留一个小文件在回收站，手动清理即可）
+  const trashRes = await exec(byName.trash_file, { file_path: path.join(dir, 'c.md') });
+  assert.ok(!fs.existsSync(path.join(dir, 'c.md')), 'trash 后原路径必须清空');
+  assert.ok(fs.existsSync(trashRes.trash_path), 'trash 后回收站路径必须存在（可恢复）');
+
+  // 底座准则同步引用四工具
+  {
+    const ctx = createMockContext();
+    hostModule.apply(ctx, { activePreset: 'pro', includeBaseProtocol: true });
+    const rendered = ctx.systemPrompt.render('{{writing_active_brick}}');
+    for (const t of ['copy_file', 'move_file', 'trash_file']) {
+      assert.ok(rendered.includes(t), `底座准则必须说明 ${t}（file-butler 已挂载）`);
+    }
+  }
+
+  // yml：五个 pure-fs 组均挂载 file-butler 行
+  const patchText = fs.readFileSync(path.join(__dirname, '../cordis.patch.yml'), 'utf8');
+  const butlerMounts = (patchText.match(/chuanban-dsh-writingset\/file-butler/g) || []).length;
+  assert.ok(butlerMounts >= 5, `五个预设的 pure-fs 组均须挂载 file-butler（实际 ${butlerMounts} 处）`);
+  // 内联准则块缩进防回归：字面量块内的准则行必须保持块内缩进，顶格行会终止 YAML 块
+  assert.ok(!/^(?:\d)\. [^\n]/m.test(fs.readFileSync(path.join(__dirname, '../cordis.patch.yml'), 'utf8')), 'cordis.patch.yml 字面量块内不得出现顶格准则行（YAML 块提前终止）');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+console.log('✓ [Test 6 通过] file-butler 四工具注册、真实文件系统往返（复制/防覆盖/移动/元数据/回收站可恢复）与 yml 挂载验证完成。');
+
+// ═══════════════════════════════════════════════════════════════
+// [Test 7] doc-bridge Word↔md 单向文档桥：注册、真实往返、第三方校验与挂载
+// ═══════════════════════════════════════════════════════════════
+{
+  const bridge = await import('../dist/doc-bridge.js');
+  assert.equal(bridge.name, 'doc-bridge', 'doc-bridge.name 必须为 doc-bridge');
+  assert.deepEqual(bridge.inject, ['tools', 'fs'], 'doc-bridge.inject 必须为 [tools, fs]');
+
+  const registered = [];
+  const bridgeCtx = {
+    tools: { register: (tool) => registered.push(tool) },
+    fs: {
+      resolve: async (p) => {
+        const abs = path.resolve(String(p));
+        return { displayPath: abs, targetKey: abs };
+      },
+      processPath: (t) => t.targetKey,
+    },
+  };
+  bridge.apply(bridgeCtx);
+  assert.deepEqual(registered.map((x) => x.name).sort(), ['convert_document', 'export_document'], '必须注册 convert_document 与 export_document');
+  const byName = Object.fromEntries(registered.map((x) => [x.name, x]));
+  const exec = (tool, args) => tool.execute(args, { signal: undefined });
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-bridge-test-'));
+  const md = '# 第一章 初雪\n\n雪落下来的时候，她正在写信。\n\n- 检查炉火\n- 喂猫\n- **重要**：锁好后门\n\n## 1.1 转折\n\n"你回来了。"她说。\n\n含转义：a < b & c > d。\n';
+  const mdPath = path.join(dir, 'story.md');
+  fs.writeFileSync(mdPath, md, 'utf8');
+
+  // export：md → 新建 docx
+  const exp = await exec(byName.export_document, { file_path: mdPath });
+  const docxPath = path.join(dir, 'story.docx');
+  assert.ok(fs.existsSync(docxPath), 'export 后 docx 必须存在');
+  assert.equal(exp.destination, docxPath, 'export 默认目标应为同名 .docx');
+
+  // 第三方独立校验：macOS textutil 必须能读出标题/列表/转义文本
+  const text = execSync(`textutil -convert txt -stdout "${docxPath}"`, { encoding: 'utf8' });
+  for (const s of ['第一章 初雪', '• 喂猫', 'a < b & c > d', '1.1 转折']) {
+    assert.ok(text.includes(s), `textutil 必须从导出的 docx 读出「${s}」`);
+  }
+
+  // convert：docx → md，往返结构等价
+  const conv = await exec(byName.convert_document, { file_path: docxPath });
+  const backPath = path.join(dir, 'story.md');
+  assert.equal(conv.destination, backPath, 'convert 默认目标应为同名 .md（覆盖原 md）');
+  const back = fs.readFileSync(backPath, 'utf8');
+  const keep = (s) => s.split('\n').filter((l) => l.trim());
+  assert.deepEqual(keep(back), keep(md.replace(/\*\*/g, '')), 'md→docx→md 往返后行集合必须等价');
+  assert.ok(conv.preview.includes('第一章'), 'convert 必须返回预览');
+
+  // 底座准则引用两工具
+  {
+    const ctx = createMockContext();
+    hostModule.apply(ctx, { activePreset: 'pro', includeBaseProtocol: true });
+    const rendered = ctx.systemPrompt.render('{{writing_active_brick}}');
+    for (const toolName of ['convert_document', 'export_document']) {
+      assert.ok(rendered.includes(toolName), `底座准则必须说明 ${toolName}`);
+    }
+  }
+
+  // yml：五个 pure-fs 组均挂载 doc-bridge 行
+  const patchText = fs.readFileSync(path.join(__dirname, '../cordis.patch.yml'), 'utf8');
+  const mounts = (patchText.match(/chuanban-dsh-writingset\/doc-bridge/g) || []).length;
+  assert.ok(mounts >= 5, `五个预设的 pure-fs 组均须挂载 doc-bridge（实际 ${mounts} 处）`);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+console.log('✓ [Test 7 通过] doc-bridge 双工具注册、md→docx（textutil 第三方校验）→md 往返等价、准则引用与 yml 挂载验证完成。');
 
 console.log('\n' + '='.repeat(70));
 console.log('🎉 所有自检测试项全部通过 (All tests passed successfully)!');

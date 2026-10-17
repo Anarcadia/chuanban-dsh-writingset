@@ -16,6 +16,14 @@
     },
     "./client": {
       "default": "./dist/client.js"
+    },
+    "./file-butler": {
+      "types": "./src/file-butler.ts",
+      "default": "./dist/file-butler.js"
+    },
+    "./doc-bridge": {
+      "types": "./src/doc-bridge.ts",
+      "default": "./dist/doc-bridge.js"
     }
   },
   "dsh": {

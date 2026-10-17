@@ -55,6 +55,10 @@
                 name: '@deepseek-ai/dsh-tool-fs-search'
                 config:
                   sampleOverCapGlobResults: false
+              - id: file-butler
+                name: 'chuanban-dsh-writingset/file-butler'
+              - id: doc-bridge
+                name: 'chuanban-dsh-writingset/doc-bridge'
           - id: compaction
             name: cordis:group
             group: true
@@ -93,9 +97,10 @@
 
                 【文档与工具协作准则】
                 你工作在一个纯净的本地文档与文本创作工作区中。
-                1. 对话优先，克制落盘：默认通过直接对话响应用户。查找文件可用 `glob` 列举目录、`grep` 检索内容（只读）；仅当用户明确要求查看、创建或修改本地文件时，才调用 `read`、`write`、`edit` 工具；构思与探讨阶段严禁擅自创建或覆写文件。
+                1. 对话优先，克制落盘：默认通过直接对话响应用户。查找文件可用 `glob` 列举目录、`grep` 检索内容（只读）；复制、移动、移入回收站等文件整理仅在用户明确要求时通过 `copy_file` / `move_file` / `trash_file` 执行；仅当用户明确要求查看、创建或修改本地文件时，才调用 `read`、`write`、`edit` 工具；构思与探讨阶段严禁擅自创建或覆写文件。
                 2. 无痕编辑，拒绝汇报：修改文档时只做精准的字句与段落替换，保持前后文风与排版连贯。完成后简明告知即可，不要输出代码审阅式的修改点摘要报告。
                 3. 去工程化：当前空间是纯文字创作工作台，摒弃软件工程术语、机械分点罗列与空洞套话总结。
+                4. Word 文稿经 `convert_document` 转为 md 读写，改毕可经 `export_document` 导出交付。
               complete: true
               includeRuntimeContext: false
           - id: pure-fs
@@ -113,6 +118,10 @@
                 name: '@deepseek-ai/dsh-tool-fs-search'
                 config:
                   sampleOverCapGlobResults: false
+              - id: file-butler
+                name: 'chuanban-dsh-writingset/file-butler'
+              - id: doc-bridge
+                name: 'chuanban-dsh-writingset/doc-bridge'
           - id: compaction
             name: cordis:group
             group: true
@@ -143,9 +152,10 @@
 
                 【文档与工具协作准则】
                 你工作在一个纯净的本地文档与文本创作工作区中。
-                1. 对话优先，克制落盘：默认通过直接对话响应用户。查找文件可用 `glob` 列举目录、`grep` 检索内容（只读）；仅当用户明确要求查看、创建或修改本地文件时，才调用 `read`、`write`、`edit` 工具；构思与探讨阶段严禁擅自创建或覆写文件。
+                1. 对话优先，克制落盘：默认通过直接对话响应用户。查找文件可用 `glob` 列举目录、`grep` 检索内容（只读）；复制、移动、移入回收站等文件整理仅在用户明确要求时通过 `copy_file` / `move_file` / `trash_file` 执行；仅当用户明确要求查看、创建或修改本地文件时，才调用 `read`、`write`、`edit` 工具；构思与探讨阶段严禁擅自创建或覆写文件。
                 2. 无痕编辑，拒绝汇报：修改文档时只做精准的字句与段落替换，保持前后文风与排版连贯。完成后简明告知即可，不要输出代码审阅式的修改点摘要报告。
                 3. 去工程化：当前空间是纯文字创作工作台，摒弃软件工程术语、机械分点罗列与空洞套话总结。
+                4. Word 文稿经 `convert_document` 转为 md 读写，改毕可经 `export_document` 导出交付。
               complete: true
               includeRuntimeContext: false
           - id: pure-fs
@@ -163,6 +173,10 @@
                 name: '@deepseek-ai/dsh-tool-fs-search'
                 config:
                   sampleOverCapGlobResults: false
+              - id: file-butler
+                name: 'chuanban-dsh-writingset/file-butler'
+              - id: doc-bridge
+                name: 'chuanban-dsh-writingset/doc-bridge'
           - id: compaction
             name: cordis:group
             group: true
@@ -193,9 +207,10 @@
 
                 【文档与工具协作准则】
                 你工作在一个纯净的本地文档与文本创作工作区中。
-                1. 对话优先，克制落盘：默认通过直接对话响应用户。查找文件可用 `glob` 列举目录、`grep` 检索内容（只读）；仅当用户明确要求查看、创建或修改本地文件时，才调用 `read`、`write`、`edit` 工具；构思与探讨阶段严禁擅自创建或覆写文件。
+                1. 对话优先，克制落盘：默认通过直接对话响应用户。查找文件可用 `glob` 列举目录、`grep` 检索内容（只读）；复制、移动、移入回收站等文件整理仅在用户明确要求时通过 `copy_file` / `move_file` / `trash_file` 执行；仅当用户明确要求查看、创建或修改本地文件时，才调用 `read`、`write`、`edit` 工具；构思与探讨阶段严禁擅自创建或覆写文件。
                 2. 无痕编辑，拒绝汇报：修改文档时只做精准的字句与段落替换，保持前后文风与排版连贯。完成后简明告知即可，不要输出代码审阅式的修改点摘要报告。
                 3. 去工程化：当前空间是纯文字创作工作台，摒弃软件工程术语、机械分点罗列与空洞套话总结。
+                4. Word 文稿经 `convert_document` 转为 md 读写，改毕可经 `export_document` 导出交付。
               complete: true
               includeRuntimeContext: false
           - id: pure-fs
@@ -213,6 +228,10 @@
                 name: '@deepseek-ai/dsh-tool-fs-search'
                 config:
                   sampleOverCapGlobResults: false
+              - id: file-butler
+                name: 'chuanban-dsh-writingset/file-butler'
+              - id: doc-bridge
+                name: 'chuanban-dsh-writingset/doc-bridge'
           - id: compaction
             name: cordis:group
             group: true
@@ -240,9 +259,10 @@
               prefix: |-
                 【文档与工具协作准则】
                 你工作在一个纯净的本地文档与文本创作工作区中。
-                1. 对话优先，克制落盘：默认通过直接对话响应用户。查找文件可用 `glob` 列举目录、`grep` 检索内容（只读）；仅当用户明确要求查看、创建或修改本地文件时，才调用 `read`、`write`、`edit` 工具；构思与探讨阶段严禁擅自创建或覆写文件。
+                1. 对话优先，克制落盘：默认通过直接对话响应用户。查找文件可用 `glob` 列举目录、`grep` 检索内容（只读）；复制、移动、移入回收站等文件整理仅在用户明确要求时通过 `copy_file` / `move_file` / `trash_file` 执行；仅当用户明确要求查看、创建或修改本地文件时，才调用 `read`、`write`、`edit` 工具；构思与探讨阶段严禁擅自创建或覆写文件。
                 2. 无痕编辑，拒绝汇报：修改文档时只做精准的字句与段落替换，保持前后文风与排版连贯。完成后简明告知即可，不要输出代码审阅式的修改点摘要报告。
                 3. 去工程化：当前空间是纯文字创作工作台，摒弃软件工程术语、机械分点罗列与空洞套话总结。
+                4. Word 文稿经 `convert_document` 转为 md 读写，改毕可经 `export_document` 导出交付。
               complete: true
               includeRuntimeContext: false
           - id: pure-fs
@@ -260,6 +280,10 @@
                 name: '@deepseek-ai/dsh-tool-fs-search'
                 config:
                   sampleOverCapGlobResults: false
+              - id: file-butler
+                name: 'chuanban-dsh-writingset/file-butler'
+              - id: doc-bridge
+                name: 'chuanban-dsh-writingset/doc-bridge'
           - id: compaction
             name: cordis:group
             group: true
