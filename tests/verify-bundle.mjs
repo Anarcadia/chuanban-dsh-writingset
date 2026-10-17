@@ -188,6 +188,14 @@ function assertHostToolContract(registered) {
     const violations = [];
     assertSchemaSubset(o.schema, 'schema', violations);
     assert.deepStrictEqual(violations, [], `tool "${tool.name}" output.schema 必须通过宿主 assertSupportedJsonSchema 子集校验`);
+    // parameters 直接上模型 API 的 function schema 线缆：必须是编译后的原始 JSON Schema
+    // （顶层 type:'object' + required 数组），而不是 defineTool 入参的属性表方言。
+    const p = tool.parameters;
+    assert.ok(p && typeof p === 'object' && !Array.isArray(p), `tool "${tool.name}" 必须声明 parameters 对象`);
+    assert.equal(p.type, 'object', `tool "${tool.name}" parameters.type 必须为 'object'（模型 API 要求，属性表方言会被拒：Invalid schema ... got 'type: null'）`);
+    const pv = [];
+    assertSchemaSubset(p, 'parameters', pv);
+    assert.deepStrictEqual(pv, [], `tool "${tool.name}" parameters 必须通过 JSON Schema 子集校验`);
     const fake = {};
     for (const [k, spec] of Object.entries(o.schema.properties ?? {})) {
       fake[k] = spec.type === 'integer' || spec.type === 'number' ? 1 : spec.type === 'boolean' ? true : 'x';

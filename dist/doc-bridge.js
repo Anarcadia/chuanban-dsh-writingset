@@ -18,19 +18,6 @@ import { dirname } from 'node:path';
 export const name = 'doc-bridge';
 export const inject = ['tools', 'fs'];
 
-async function loadDefineTool() {
-  try {
-    const mod = await import('@deepseek-ai/dsh-tools');
-    if (typeof mod.defineTool === 'function') return mod.defineTool;
-    if (typeof mod.default?.defineTool === 'function') return mod.default.defineTool;
-  } catch {
-    // 独立 Node 测试环境无宿主解析链：定义透传，由 mock ctx 接收
-  }
-  return (tool) => tool;
-}
-
-const defineTool = await loadDefineTool();
-
 function parsePathArg(value, label) {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new Error(`${label} must be a non-empty string`);
@@ -284,12 +271,16 @@ export function markdownToDocxBuffer(mdText) {
 const PREVIEW_CHARS = 600;
 
 export function apply(ctx) {
-  ctx.tools.register(defineTool({
+  ctx.tools.register({
     name: 'convert_document',
     description: 'Convert a .docx (Word) file into a Markdown text file (same name with .md by default). Extracts paragraphs, heading levels and list items; tables are flattened and inline formatting is dropped. Optionally returns a preview of the converted text.',
     parameters: {
-      file_path: { type: 'string', required: true, description: 'Path to the .docx source.' },
-      destination: { type: 'string', description: 'Destination .md path. Defaults to the source path with the extension replaced by .md.' },
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Path to the .docx source.' },
+        destination: { type: 'string', description: 'Destination .md path. Defaults to the source path with the extension replaced by .md.' },
+      },
+      required: ['file_path'],
     },
     output: {
       schema: {
@@ -320,14 +311,18 @@ export function apply(ctx) {
       const preview = md.length > PREVIEW_CHARS ? md.slice(0, PREVIEW_CHARS) + '\n…（已截断，全文见输出文件）' : md.trimEnd();
       return { source: src.display, destination: dst.display, characters: md.length, preview };
     },
-  }));
+  });
 
-  ctx.tools.register(defineTool({
+  ctx.tools.register({
     name: 'export_document',
     description: 'Export a Markdown file as a NEW .docx (Word) document. Headings, list items and paragraphs map to proper Word styles; inline markdown emphasis is stripped. The original .docx is never modified — this always creates a new file.',
     parameters: {
-      file_path: { type: 'string', required: true, description: 'Path to the .md source.' },
-      destination: { type: 'string', description: 'Destination .docx path. Defaults to the source path with the extension replaced by .docx.' },
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Path to the .md source.' },
+        destination: { type: 'string', description: 'Destination .docx path. Defaults to the source path with the extension replaced by .docx.' },
+      },
+      required: ['file_path'],
     },
     output: {
       schema: {
@@ -352,5 +347,5 @@ export function apply(ctx) {
       await writeFile(dst.real, docx);
       return { source: src.display, destination: dst.display, bytes: docx.length };
     },
-  }));
+  });
 }

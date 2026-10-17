@@ -15,19 +15,6 @@ import { homedir } from 'node:os';
 export const name = 'file-butler';
 export const inject = ['tools', 'fs'];
 
-async function loadDefineTool() {
-  try {
-    const mod = await import('@deepseek-ai/dsh-tools');
-    if (typeof mod.defineTool === 'function') return mod.defineTool;
-    if (typeof mod.default?.defineTool === 'function') return mod.default.defineTool;
-  } catch {
-    // 独立 Node 测试环境无宿主解析链：定义透传，由 mock ctx 接收
-  }
-  return (tool) => tool;
-}
-
-const defineTool = await loadDefineTool();
-
 function parsePathArg(value, label) {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new Error(`${label} must be a non-empty string`);
@@ -54,13 +41,17 @@ async function moveAcrossDevices(srcReal, dstReal) {
 }
 
 export function apply(ctx) {
-  ctx.tools.register(defineTool({
+  ctx.tools.register({
     name: 'copy_file',
     description: 'Copy a file or a whole directory tree to a new path. Runs server-side, so large or binary files bypass the conversation context entirely. Missing parent directories of the destination are created automatically.',
     parameters: {
-      file_path: { type: 'string', required: true, description: 'Source path to copy (file or directory).' },
-      destination: { type: 'string', required: true, description: 'Destination path.' },
-      overwrite: { type: 'boolean', description: 'Whether an existing destination may be overwritten. Defaults to true.' },
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Source path to copy (file or directory).' },
+        destination: { type: 'string', description: 'Destination path.' },
+        overwrite: { type: 'boolean', description: 'Whether an existing destination may be overwritten. Defaults to true.' },
+      },
+      required: ['file_path', 'destination'],
     },
     output: {
       schema: {
@@ -84,14 +75,18 @@ export function apply(ctx) {
       const info = await stat(dst.real);
       return { source: src.display, destination: dst.display, bytes: info.size, is_directory: info.isDirectory() };
     },
-  }));
+  });
 
-  ctx.tools.register(defineTool({
+  ctx.tools.register({
     name: 'move_file',
     description: 'Move or rename a file or directory to a new path (server-side). Missing parent directories of the destination are created automatically.',
     parameters: {
-      file_path: { type: 'string', required: true, description: 'Source path to move (file or directory).' },
-      destination: { type: 'string', required: true, description: 'Destination path.' },
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Source path to move (file or directory).' },
+        destination: { type: 'string', description: 'Destination path.' },
+      },
+      required: ['file_path', 'destination'],
     },
     output: {
       schema: {
@@ -117,13 +112,17 @@ export function apply(ctx) {
       }
       return { source: src.display, destination: dst.display, moved: true };
     },
-  }));
+  });
 
-  ctx.tools.register(defineTool({
+  ctx.tools.register({
     name: 'trash_file',
     description: 'Move a file or directory into the system trash (~/.Trash on macOS), from which it can be restored. This never permanently deletes anything.',
     parameters: {
-      file_path: { type: 'string', required: true, description: 'Path of the file or directory to trash.' },
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Path of the file or directory to trash.' },
+      },
+      required: ['file_path'],
     },
     output: {
       schema: {
@@ -153,13 +152,17 @@ export function apply(ctx) {
         restore_hint: 'Open the system trash to restore, or move it back manually.',
       };
     },
-  }));
+  });
 
-  ctx.tools.register(defineTool({
+  ctx.tools.register({
     name: 'stat_file',
     description: 'Show metadata of a file or directory: size in bytes, creation and modification times, and type.',
     parameters: {
-      file_path: { type: 'string', required: true, description: 'Path to inspect.' },
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Path to inspect.' },
+      },
+      required: ['file_path'],
     },
     output: {
       schema: {
@@ -186,5 +189,5 @@ export function apply(ctx) {
         is_directory: info.isDirectory(),
       };
     },
-  }));
+  });
 }
