@@ -1,6 +1,6 @@
 {
   "name": "chuanban-dsh-writingset",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "DeepSeek Harness (DSH) 纯净写作协作模式插件（与 Storydesk 工作台内核等效）",
   "main": "./dist/index.js",
