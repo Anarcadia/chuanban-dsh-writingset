@@ -1,9 +1,9 @@
 # chuanban-dsh-writingset
 
 > **DeepSeek Harness (DSH) 纯净写作协作预设插件**  
-> *Minimal writing-collaboration preset for DeepSeek Harness — zero coding noise, `read / write / edit` plus read-only `glob / grep`, and modular role prompts.*
+> *Minimal writing-collaboration preset for DeepSeek Harness — zero coding noise, `read / write / edit`, read-only `glob / grep`, safe `copy / move / trash / stat`, zero-dep `docx ↔ md` bridge, and modular role prompts.*
 
-**极简介绍**：船板自用 DSH 写作工作台，砍掉 DSH 所有系统提示（接近极简模式），同时比极简模式增加基础读写工具适配写作场景，添加情境代入写作人设，帮助 Agent 更好代入。
+**极简介绍**：船板自用 DSH 写作工作台，砍掉 DSH 所有系统提示（接近极简模式），同时比极简模式增加贴合写作全流程的本地工具集（读写改、只读查找、可恢复文件整理、Word 稿件进出），添加情境代入写作人设，帮助 Agent 更好代入。
 
 插件本身不具备破限和风格指定效果，破限和风格指定需要用户在工作区添加世界观和写作风格资料、伪上下文；插件预设起到的作用，是帮助 Agent 更好地接受和理解你的设定，就像药引子。
 
@@ -23,7 +23,7 @@ DSH 在这一点上也不例外。虽然它内置了「极简模式（`minimal`�
 
 `chuanban-dsh-writingset` 的目标只有一件事：**赋予 DSH 极简、稳定的基础写作预设和工具环境**。
 
-它在 DSH 运行时将原生编程提示词与冗余工具一刀切清零，把可选工具收敛为 `read`、`write`、`edit` 三个落盘工具加 `glob`、`grep` 两个只读查找工具，再用**「去工程化的用户协作基底 + 极简写作人设」双层提示词积木**接管上下文。
+它在 DSH 运行时将原生编程提示词与冗余工具一刀切清零（**零 Shell 命令执行通道**），把工具面精准收敛为写作者真正用得上的四组纯路径工具——基础读写（`read` / `write` / `edit`）、只读查找（`glob` / `grep`）、安全文件整理（`copy_file` / `move_file` / `trash_file` / `stat_file`）与零依赖 Word 单向桥（`convert_document` / `export_document`），再用**「去工程化的用户协作基底 + 极简写作人设」双层提示词积木**接管上下文。
 
 于是，首轮输入仅 **1,196 tokens**（比官方标准预设节省逾 **80%**），让 DSH 成为一张高效、低底噪的纯文字工作台。
 
@@ -121,14 +121,18 @@ dsh web
 
 ## 底层做了什么？（为什么不与本地 Skill 冲突，但忌叠装同类预设插件）
 
-DSH 原生的 `minimal` 模式之所以不能直接用来写东西，是因为它把文件工具也一起砍掉了；而官方默认模式又挂满了工程插件。本插件在底层通过 `cordis.patch.yml` 做了四件精确的改造：
+DSH 原生的 `minimal` 模式之所以不能直接用来写东西，是因为它把文件工具也一起砍掉了；而官方默认模式又挂满了工程插件。本插件在底层通过 `cordis.patch.yml` 与内置子模块做了精确改造：
 
 - **接管并重构主系统提示词（`complete: true`）**：在 `@deepseek-ai/dsh-persona` 开启 `complete: true`，将渲染终点的系统提示词收束为 `{{writing_active_brick}}` 变量，一刀切掉官方数千字的全栈工程师人设。
-  - **为什么不与本地工作台/Skill 冲突**：插件在宿主侧通过 `workspace` 模式主动读取当前会话目录（`cwd`）下的 `AGENTS.md` / `CLAUDE.md` / `memory` / `rules` 并拼入 `{{writing_active_brick}}`，等于在干净的底座上为你留好了标准的工作区规则入口。
+  - **为什么不与本地工作台/Skill 冲突**：插件在宿主侧通过 `workspace` 模式主动读取当前会话目录（`cwd`）下的 `AGENTS.md` / `CLAUDE.md` / `memory` / `rules` 并拼入 `{{writing_active_brick}}`（64KB $O(1)$ 安全截断），等于在干净的底座上为你留好了标准的工作区规则入口。
   - **为什么不建议与其它系统提示词插件同开**：因为 `complete: true` 是独占截断机制，若同时启用其它修改初始 Persona 或拦截 System Prompt 的插件，两者会互相覆盖或拼出混乱指令。
 - **静音沙箱与审批长文（`includeRuntimeContext: false`）**：关掉运行时沙箱策略与审批机制的冗长说明，只留必需的当前工作目录路径感知。
-- **收敛为最小读写工具面（`isolate: { fs: true, attachments: true }`）**：在独立作用域挂载 `@deepseek-ai/dsh-fs-local` 与 `@deepseek-ai/dsh-tool-fs`，切断根作用域 `read_image` 的自动注册，并剥离 `write` / `edit` 工具 Schema 里的 `sandbox_permissions` 与 `justification` 参数——模型眼里只有干干净净的 `read`、`write`、`edit`（外加宿主自带的零参查询工具 `load_workspace_dependencies`）。
-- **v0.2.0 新增：挂载 `@deepseek-ai/dsh-tool-fs-search`**：每个写作预设的工具组都加上只读的目录列举（`glob`）与全文检索（`grep`）——Agent 能自己找到工作区里的文件、跨章节核验批量改动，仍不具备任何命令执行能力。
+- **收敛为纯净写作工具面（零 Shell 执行通道，`isolate: { fs: true, attachments: true }`）**：
+  - **基础读写（`@deepseek-ai/dsh-tool-fs`）**：在独立作用域挂载 `read`、`write`、`edit`，切断根作用域 `read_image` 的自动注册，并剥离 `sandbox_permissions` 与 `justification` 参数。
+  - **只读查找（v0.2.0，`@deepseek-ai/dsh-tool-fs-search`）**：挂载 `glob`（列举文件，100 条上限 + 溢出清单；注：`*.md` 为全树递归，`/*.md` 为根层锚定，仅返回文件不返回目录名）与 `grep`（正则全文检索带行号）。
+  - **文件整理（v0.3.0，`file-butler`）**：提供 `copy_file`、`move_file`、`trash_file`、`stat_file` 四个服务端纯路径工具——长稿与二进制流转不经过模型上下文；`copy_file` 与 `move_file` 默认 `overwrite: false` 防误覆写（目标传目录名时自动拼入同名文件）；`trash_file` 将文件移入 `~/.Trash`（带毫秒时间戳与防碰撞序号，可手动恢复，不承诺 Finder「放回原处」元数据），绝不永久删除。
+  - **Word 单向文档桥（v0.3.0，`doc-bridge`）**：零外部依赖提供 `convert_document`（`.docx` → `.md`）与 `export_document`（`.md` → 新建 `.docx`）。定位为**内容级单向转换**：保留正文段落、标题层级（H1–H6）与列表项，表格拍平为正文行，行内粗斜体等样式不保留；内置**双向防覆盖保护**——目标 `.md` 已存在时自动派生 `<name>.converted.md`，目标 `.docx` 已存在时自动派生 `<name>.exported.docx`，绝不修改或覆盖原稿。
+  - *(注：会话中另有宿主运行时自带的 `working_directory` 与 `load_workspace_dependencies`，非本插件注册。)*
 - **保留长文会话压缩**：内置 `@deepseek-ai/dsh-compaction-basic` 与 `/compact` 指令，长篇连载讨论可随时压缩上下文。
 
 ---
@@ -147,7 +151,7 @@ node scripts/switch-preset.mjs --show pro
 # 一键切换默认预设（pro / play / rp / pure / pro-v1）
 node scripts/switch-preset.mjs play
 
-# 运行内置 5 项全链路自检测试套件
+# 运行内置 7 项全链路自检测试套件
 npm test
 ```
 
